@@ -1,6 +1,6 @@
-# HybridCLR + YooAsset + CDN 热更新框架
+# HybridCLR + YooAsset + UniTask 热更新框架
 
-这个项目在 `Assets/HotUpdateFramework` 下提供了一套轻量热更新框架，用来串联 HybridCLR、YooAsset 和任意 HTTP/HTTPS CDN。CDN 可以是对象存储、云厂商 CDN、自建静态服务器、Nginx、OSS/COS/S3 兼容源站等，只要 YooAsset 生成的文件能通过 URL 访问即可。
+这个项目在 `Assets/HotUpdateFramework` 下提供了一套轻量热更新框架，用来串联 HybridCLR、YooAsset 和 UniTask，并支持任意 HTTP/HTTPS CDN。CDN 可以是对象存储、云厂商 CDN、自建静态服务器、Nginx、OSS/COS/S3 兼容源站等，只要 YooAsset 生成的文件能通过 URL 访问即可。
 
 ## 单包结构
 
