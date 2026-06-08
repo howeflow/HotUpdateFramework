@@ -3,7 +3,10 @@
   "BucketName": "your-r2-bucket",
   "AccountId": "your-cloudflare-account-id",
   "EndpointUrl": "",
-  "Prefix": "",
+  "Prefixes": [
+    "dev",
+    "release"
+  ],
   "AwsProfile": "",
   "DeleteRemote": false,
   "PublishLocalFirst": true,

@@ -18,8 +18,10 @@ MonoBehaviour:
   useBuildinFileSystemInHostMode: 0
   packageVersionOverride: 
   manifestTimeout: 10
-  remoteMainRoot: http://127.0.1:8080
-  remoteFallbackRoot: http://127.0.1:8080
+  remoteRoots:
+  - http://127.0.0.1:8080
+  - https://your-cdn-domain.example.com/hotupdate/dev
+  - https://your-cdn-domain.example.com/hotupdate/release
   remoteUrlTemplate: '{Root}/{Platform}/{PackageName}/{FileName}'
   platformNameOverride: 
   downloadPackage: 1

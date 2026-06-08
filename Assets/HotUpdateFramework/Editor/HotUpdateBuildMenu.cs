@@ -138,6 +138,7 @@ namespace HotUpdateFramework.Editor
                 PackageVersion = packageVersion,
                 PackageNote = "Hot update package",
                 EnableSharePackRule = true,
+                SingleReferencedPackAlone = false,
                 VerifyBuildingResult = true,
                 FileNameStyle = EFileNameStyle.HashName,
                 BuildinFileCopyOption = buildinFileCopyOption,

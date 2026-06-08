@@ -22,8 +22,12 @@ namespace HotUpdateFramework
         [SerializeField] private int manifestTimeout = 10;
 
         [Header("CDN")]
-        [SerializeField] private string remoteMainRoot = "https://your-cdn-domain.example.com/hotupdate";
-        [SerializeField] private string remoteFallbackRoot = string.Empty;
+        [SerializeField] private string[] remoteRoots =
+        {
+            "https://your-cdn-domain.example.com/hotupdate/release",
+            "https://your-cdn-domain.example.com/hotupdate/dev",
+            "http://127.0.0.1:8080"
+        };
         [SerializeField] private string remoteUrlTemplate = "{Root}/{Platform}/{PackageName}/{FileName}";
         [SerializeField] private string platformNameOverride = string.Empty;
 
@@ -59,8 +63,9 @@ namespace HotUpdateFramework
         public bool UseBuildinFileSystemInHostMode => useBuildinFileSystemInHostMode;
         public string PackageVersionOverride => packageVersionOverride?.Trim() ?? string.Empty;
         public int ManifestTimeout => Mathf.Max(1, manifestTimeout);
-        public string RemoteMainRoot => remoteMainRoot?.Trim() ?? string.Empty;
-        public string RemoteFallbackRoot => remoteFallbackRoot?.Trim() ?? string.Empty;
+        public IReadOnlyList<string> RemoteRoots => remoteRoots ?? Array.Empty<string>();
+        public string RemoteMainRoot => GetRemoteRootByPriority(0);
+        public string RemoteFallbackRoot => GetRemoteRootByPriority(1);
         public string RemoteUrlTemplate => string.IsNullOrWhiteSpace(remoteUrlTemplate) ? "{Root}/{Platform}/{PackageName}/{FileName}" : remoteUrlTemplate.Trim();
         public string PlatformNameOverride => platformNameOverride?.Trim() ?? string.Empty;
         public bool IsRemoteMainRootConfigured => string.IsNullOrWhiteSpace(RemoteMainRoot) == false && RemoteMainRoot.Contains("your-cdn-domain") == false;
@@ -92,6 +97,26 @@ namespace HotUpdateFramework
         {
             string value = string.IsNullOrWhiteSpace(assetDirectory) ? fallback : assetDirectory.Trim();
             return value.Replace('\\', '/').TrimEnd('/');
+        }
+
+        private string GetRemoteRootByPriority(int priorityIndex)
+        {
+            if (remoteRoots == null || priorityIndex < 0)
+                return string.Empty;
+
+            int validIndex = 0;
+            foreach (string remoteRoot in remoteRoots)
+            {
+                if (string.IsNullOrWhiteSpace(remoteRoot))
+                    continue;
+
+                if (validIndex == priorityIndex)
+                    return remoteRoot.Trim();
+
+                validIndex++;
+            }
+
+            return string.Empty;
         }
 
         private string[] BuildAotMetadataAssetLocations()

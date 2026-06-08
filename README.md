@@ -145,31 +145,44 @@ Hot Update/Build YooAsset Package
 {Root}/{Platform}/{PackageName}/{FileName}
 ```
 
-如果 `HotUpdateConfig.asset` 里的 `RemoteMainRoot` 设置为：
+`HotUpdateConfig.asset` 使用 `remoteRoots` 列表配置远端根地址。列表从上往下表示优先级：
+
+- 第一个非空地址：YooAsset main URL
+- 第二个非空地址：YooAsset fallback URL
+- 第三个及之后：作为备用地址记录，运行时不会被 YooAsset 自动逐个尝试，需要使用时把它拖到列表前面
+
+可以把本地、测试、正式地址都放在列表里，通过调整顺序决定当前包访问哪条 CDN：
 
 ```text
-https://cdn.example.com/hotupdate
+http://127.0.0.1:8080
+https://cdn.example.com/hotupdate/dev
+https://cdn.example.com/hotupdate/release
+```
+
+如果 `remoteRoots` 的第一项设置为：
+
+```text
+https://cdn.example.com/hotupdate/dev
 ```
 
 Android 平台会请求：
 
 ```text
-https://cdn.example.com/hotupdate/Android/DefaultPackage/<YooAssetFileName>
+https://cdn.example.com/hotupdate/dev/Android/DefaultPackage/<YooAssetFileName>
 ```
 
 所以 CDN 源站目录应该类似这样：
 
 ```text
 <CDN源站根目录>/hotupdate/
-  Android/
-    DefaultPackage/
-      <YooAsset输出文件>
-  iOS/
-    DefaultPackage/
-      <YooAsset输出文件>
-  Windows64/
-    DefaultPackage/
-      <YooAsset输出文件>
+  dev/
+    Android/
+      DefaultPackage/
+        <YooAsset输出文件>
+  release/
+    Android/
+      DefaultPackage/
+        <YooAsset输出文件>
 ```
 
 本地发布默认读取 `Tools/local_cdn_server.config.json`：
@@ -217,7 +230,7 @@ LocalCdn/Android/DefaultPackage
 python .\Tools\local_cdn_server.py --start-local-server
 ```
 
-此时 `HotUpdateConfig.asset` 里的 `RemoteMainRoot` 可以填：
+此时可以把本地地址放到 `HotUpdateConfig.asset` 的 `remoteRoots` 第一位：
 
 ```text
 http://127.0.0.1:8080
@@ -231,10 +244,10 @@ http://127.0.0.1:8080
 }
 ```
 
-然后 `RemoteMainRoot` 对应填你的公网地址，例如：
+然后把公网地址放到 `remoteRoots` 第一位，例如：
 
 ```text
-https://cdn.example.com/hotupdate
+https://cdn.example.com/hotupdate/dev
 ```
 
 命令行参数可临时覆盖配置：
@@ -277,7 +290,10 @@ python -m pip install -r .\Tools\requirements-r2.txt
   "BucketName": "your-r2-bucket",
   "AccountId": "your-cloudflare-account-id",
   "EndpointUrl": "",
-  "Prefix": "",
+  "Prefixes": [
+    "dev",
+    "release"
+  ],
   "AwsProfile": "",
   "DeleteRemote": false,
   "PublishLocalFirst": true,
@@ -298,6 +314,21 @@ python -m pip install -r .\Tools\requirements-r2.txt
 python .\Tools\sync_cdn_to_r2.py
 ```
 
+如果 `Prefixes` 配置了多个前缀，脚本会先让你选择要同步到哪个目录：
+
+```text
+Select R2 prefix:
+  1. dev
+  2. release
+Prefix [1-2, default 1]:
+```
+
+也可以在命令行里直接指定，适合接 CI 或固定发布目标：
+
+```powershell
+python .\Tools\sync_cdn_to_r2.py --prefix release
+```
+
 也可以提前在终端设置环境变量，脚本检测到后不会再次询问：
 
 ```powershell
@@ -309,10 +340,10 @@ python .\Tools\sync_cdn_to_r2.py
 脚本会先按 `local_cdn_server.config.json` 刷新 `LocalCdn`，再同步到：
 
 ```text
-s3://<BucketName>/<Prefix>
+s3://<BucketName>/<SelectedPrefix>
 ```
 
-`IncrementalUpload` 开启时，脚本会在本地生成同步清单，并上传到 R2 的 `.r2-sync-manifest.json`。下次同步会先读取远程清单，按文件相对路径、大小和 MD5 判断是否变化，只上传新增或变化的文件。第一次远程没有同步清单时，脚本会退回使用 R2 对象列表做比对；执行后会写入同步清单，后续同步就会走清单比对。命令行可以临时关闭增量上传：
+`IncrementalUpload` 开启时，脚本会在本地生成同步清单，并上传到 R2 的 `<SelectedPrefix>/.r2-sync-manifest.json`。下次同步会先读取所选前缀下的远程清单，按文件相对路径、大小和 MD5 判断是否变化，只上传新增或变化的文件。第一次远程没有同步清单时，脚本会退回使用 R2 对象列表做比对；执行后会写入同步清单，后续同步就会走清单比对。命令行可以临时关闭增量上传：
 
 ```powershell
 python .\Tools\sync_cdn_to_r2.py --upload-all
@@ -321,14 +352,15 @@ python .\Tools\sync_cdn_to_r2.py --upload-all
 R2 公开访问地址对应填到 `HotUpdateConfig.asset`：
 
 ```text
-RemoteMainRoot = https://pub-xxxx.r2.dev
-RemoteFallbackRoot = https://pub-xxxx.r2.dev
+remoteRoots[0] = https://pub-xxxx.r2.dev/dev
+remoteRoots[1] = https://pub-xxxx.r2.dev/release
 ```
 
-如果 `Prefix` 设置为 `hotupdate`，远端文件路径为 `hotupdate/Android/DefaultPackage/...`，`RemoteMainRoot` 需要包含这个前缀：
+如果发布正式环境，运行脚本时选择 `release` 或传入 `--prefix release`，远端文件路径为 `release/Android/DefaultPackage/...`。要让当前包访问正式环境，把正式地址放到 `remoteRoots` 第一位：
 
 ```text
-https://pub-xxxx.r2.dev/hotupdate
+remoteRoots[0] = https://pub-xxxx.r2.dev/release
+remoteRoots[1] = https://pub-xxxx.r2.dev/dev
 ```
 
 ## 注意事项

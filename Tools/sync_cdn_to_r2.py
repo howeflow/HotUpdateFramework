@@ -63,6 +63,64 @@ def normalize_prefix(value):
     return str(value).strip().replace("\\", "/").strip("/")
 
 
+def normalize_prefixes(value):
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        values = value.split(",")
+    elif isinstance(value, (list, tuple)):
+        values = value
+    else:
+        values = [value]
+
+    prefixes = []
+    for item in values:
+        prefix = normalize_prefix(item)
+        if prefix and prefix not in prefixes:
+            prefixes.append(prefix)
+
+    return prefixes
+
+
+def select_prefix(config, cli_prefix):
+    if cli_prefix is not None and str(cli_prefix).strip():
+        return normalize_prefix(cli_prefix)
+
+    prefixes = normalize_prefixes(config.get("Prefixes"))
+    if not prefixes:
+        prefixes = normalize_prefixes(config.get("Prefix"))
+
+    if not prefixes:
+        return ""
+
+    if len(prefixes) == 1:
+        return prefixes[0]
+
+    if not sys.stdin.isatty():
+        raise RuntimeError("Multiple R2 prefixes are configured. Pass --prefix to choose one.")
+
+    print("Select R2 prefix:")
+    for index, prefix in enumerate(prefixes, start=1):
+        print(f"  {index}. {prefix}")
+
+    while True:
+        answer = input(f"Prefix [1-{len(prefixes)}, default 1]: ").strip()
+        if answer == "":
+            return prefixes[0]
+
+        if answer.isdigit():
+            selected_index = int(answer)
+            if 1 <= selected_index <= len(prefixes):
+                return prefixes[selected_index - 1]
+
+        selected_prefix = normalize_prefix(answer)
+        if selected_prefix in prefixes:
+            return selected_prefix
+
+        print("Invalid prefix. Enter a number from the list or one of the configured prefix names.")
+
+
 def is_placeholder(value):
     if value is None:
         return True
@@ -447,7 +505,7 @@ def parse_args():
     parser.add_argument("--bucket-name", default=None)
     parser.add_argument("--account-id", default=None)
     parser.add_argument("--endpoint-url", default=None)
-    parser.add_argument("--prefix", default=None)
+    parser.add_argument("--prefix", default=None, help="R2 object prefix to use. Overrides Prefixes in config.")
     parser.add_argument("--aws-profile", default=None)
     parser.add_argument("--delete-remote", action="store_true", default=None)
     parser.add_argument("--keep-remote", action="store_true", default=None)
@@ -503,7 +561,7 @@ def main(args):
     bucket_name = str(config_value(config, "BucketName", args.bucket_name, "")).strip()
     account_id = str(config_value(config, "AccountId", args.account_id, "")).strip()
     endpoint_url = str(config_value(config, "EndpointUrl", args.endpoint_url, "")).strip()
-    prefix = normalize_prefix(config_value(config, "Prefix", args.prefix, ""))
+    prefix = select_prefix(config, args.prefix)
     aws_profile = str(config_value(config, "AwsProfile", args.aws_profile, "")).strip()
     publish_config_path = config_value(config, "PublishConfigPath", args.publish_config_path, "Tools/local_cdn_server.config.json")
     public_root = str(config_value(config, "PublicRoot", args.public_root, "")).strip()
