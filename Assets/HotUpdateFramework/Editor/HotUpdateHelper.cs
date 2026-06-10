@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using HybridCLR.Editor;
 using HybridCLR.Editor.Commands;
 using HybridCLR.Editor.Settings;
+using HotUpdateFramework.Crypto.Editor;
 using UnityEditor;
 using UnityEngine;
 using YooAsset;
@@ -112,12 +113,14 @@ namespace HotUpdateFramework.Editor
                 BuildinFileCopyOption = buildinFileCopyOption,
                 BuildinFileCopyParams = string.Empty,
                 CompressOption = ECompressOption.LZ4,
+                EncryptionServices = config.EnableBundleEncryption ? new HotUpdateBundleEncryptionServices() : null,
                 ClearBuildCacheFiles = false,
                 UseAssetDependencyDB = true,
                 BuiltinShadersBundleName = GetBuiltinShaderBundleName(config.PackageName)
             };
 
             Debug.Log($"[HotUpdate] Buildin file copy option: {buildinFileCopyOption}");
+            Debug.Log($"[HotUpdate] Bundle encryption: {(config.EnableBundleEncryption ? "Enabled" : "Disabled")}");
 
             var pipeline = new ScriptableBuildPipeline();
             BuildResult buildResult = pipeline.Run(buildParameters, true);

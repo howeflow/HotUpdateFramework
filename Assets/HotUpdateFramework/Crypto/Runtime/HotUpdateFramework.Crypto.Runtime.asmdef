@@ -1,11 +1,8 @@
 {
-    "name": "HotUpdateFramework.Runtime",
-    "rootNamespace": "HotUpdateFramework",
+    "name": "HotUpdateFramework.Crypto.Runtime",
+    "rootNamespace": "HotUpdateFramework.Crypto",
     "references": [
-        "HotUpdateFramework.Crypto.Runtime",
-        "YooAsset",
-        "UniTask",
-        "HybridCLR.Runtime"
+        "YooAsset"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

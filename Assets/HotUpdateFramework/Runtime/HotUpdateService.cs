@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using HybridCLR;
+using HotUpdateFramework.Crypto;
 using UnityEngine;
 using YooAsset;
 
@@ -84,6 +85,8 @@ namespace HotUpdateFramework
 
         private static InitializeParameters CreateInitializeParameters(HotUpdateConfig config, string packageName)
         {
+            IDecryptionServices decryptionServices = CreateDecryptionServices(config);
+
             switch (config.PlayMode)
             {
                 case EPlayMode.EditorSimulateMode:
@@ -96,7 +99,7 @@ namespace HotUpdateFramework
                 case EPlayMode.OfflinePlayMode:
                     return new OfflinePlayModeParameters
                     {
-                        BuildinFileSystemParameters = FileSystemParameters.CreateDefaultBuildinFileSystemParameters()
+                        BuildinFileSystemParameters = FileSystemParameters.CreateDefaultBuildinFileSystemParameters(decryptionServices)
                     };
 
                 case EPlayMode.HostPlayMode:
@@ -104,12 +107,15 @@ namespace HotUpdateFramework
                     return new HostPlayModeParameters
                     {
                         BuildinFileSystemParameters = config.UseBuildinFileSystemInHostMode
-                            ? FileSystemParameters.CreateDefaultBuildinFileSystemParameters()
+                            ? FileSystemParameters.CreateDefaultBuildinFileSystemParameters(decryptionServices)
                             : null,
-                        CacheFileSystemParameters = FileSystemParameters.CreateDefaultCacheFileSystemParameters(remoteServices)
+                        CacheFileSystemParameters = FileSystemParameters.CreateDefaultCacheFileSystemParameters(remoteServices, decryptionServices)
                     };
 
                 case EPlayMode.WebPlayMode:
+                    if (config.EnableBundleEncryption)
+                        throw new HotUpdateException("Bundle encryption does not support WebPlayMode.");
+
                     IRemoteServices webRemoteServices = new CdnRemoteServices(config, packageName);
                     return new WebPlayModeParameters
                     {
@@ -120,6 +126,13 @@ namespace HotUpdateFramework
                 default:
                     throw new HotUpdateException($"Unsupported YooAsset play mode: {config.PlayMode}");
             }
+        }
+
+        private static IDecryptionServices CreateDecryptionServices(HotUpdateConfig config)
+        {
+            return config.EnableBundleEncryption
+                ? new HotUpdateBundleDecryptionServices()
+                : null;
         }
 
         private async UniTask<string> RequestAndUpdateManifestAsync(HotUpdateConfig config, ResourcePackage package, string packageVersionOverride, IProgress<HotUpdateProgress> progress, CancellationToken cancellationToken)

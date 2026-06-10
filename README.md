@@ -19,6 +19,8 @@
 
 是否下载整个包由 `HotUpdateConfig.asset` 里的 `downloadPackage` 控制，默认开启。
 
+资源包加密由 `HotUpdateConfig.asset` 里的 `enableBundleEncryption` 控制。开启后，`Hot Update/Build YooAsset Package` 会在 YooAsset Bundle 文件头部追加固定偏移字节，运行时在 `HostPlayMode` 和 `OfflinePlayMode` 跳过偏移加载。偏移值在 `HotUpdateOffsetCrypto.DefaultOffset` 中定义。
+
 ## 运行时接入
 
 框架不在 App 启动时自动开始热更，也不通过 `RuntimeInitializeOnLoadMethod` 自动创建对象。建议在 BootScene 里完成隐私协议、基础 SDK、网络检查、强更检查之后，再手动调用：
@@ -110,7 +112,7 @@ Build Player
 Build Player
 ```
 
-改了 `useBuildinFileSystemInHostMode`：
+改了 `useBuildinFileSystemInHostMode` / 加密开关 / 偏移加密代码：
 
 ```text
 Hot Update/Build YooAsset Package
@@ -366,6 +368,7 @@ remoteRoots[1] = https://pub-xxxx.r2.dev/dev
 - 真机联机更新建议使用 `HostPlayMode`，并确保源站目录结构和 URL 模板一致。
 - 项目按强联网流程处理热更。没有网络或源站不可用时，版本和清单请求会按 `manifestTimeout` 超时失败，启动层应显示重试、退出或检查网络，不走离线缓存进游戏。
 - `useBuildinFileSystemInHostMode` 只有在重新执行 `Hot Update/Build YooAsset Package` 并重新打 App 包后才对真机首包生效；只在运行时勾选但没有生成 `StreamingAssets/DefaultPackage`，会导致内置 catalog 或清单缺失。
+- `enableBundleEncryption` 使用偏移加密，适合降低 AssetBundle 直接查看的风险，运行时优先通过 `LoadFromFile` 偏移加载，不需要额外密钥。当前没有接入 WebPlayMode 解密。
 - `Hot Update/Clear/Build Cache` 对齐 YooAsset Builder 的 `Clear Build Cache`，会清理 Scriptable Build Pipeline 缓存，并删除当前平台当前包的构建目录 `Bundles/<Platform>/<PackageName>`。
 - Editor 模拟模式依赖 `AssetBundleCollectorSetting.asset` 里存在 `DefaultPackage`。框架不在启动模拟构建前自动修改 Collector 配置。
 - 业务资源默认放进 `Assets/HotUpdateAssets/Res`，运行时可以通过 `YooAssets.GetPackage("DefaultPackage")` 或默认包加载。

@@ -1,13 +1,9 @@
 {
-    "name": "HotUpdateFramework.Editor",
-    "rootNamespace": "HotUpdateFramework.Editor",
+    "name": "HotUpdateFramework.Crypto.Editor",
+    "rootNamespace": "HotUpdateFramework.Crypto.Editor",
     "references": [
-        "HotUpdateFramework.Runtime",
-        "HotUpdateFramework.Crypto.Editor",
-        "YooAsset",
-        "YooAsset.Editor",
-        "HybridCLR.Editor",
-        "Unity.ScriptableBuildPipeline.Editor"
+        "HotUpdateFramework.Crypto.Runtime",
+        "YooAsset"
     ],
     "includePlatforms": [
         "Editor"

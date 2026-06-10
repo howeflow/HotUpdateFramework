@@ -20,6 +20,7 @@ namespace HotUpdateFramework
         [SerializeField] private bool useBuildinFileSystemInHostMode = false;
         [SerializeField] private string packageVersionOverride = string.Empty;
         [SerializeField] private int manifestTimeout = 10;
+        [SerializeField] private bool enableBundleEncryption = false;
 
         [Header("CDN")]
         [SerializeField] private string[] remoteRoots =
@@ -64,14 +65,13 @@ namespace HotUpdateFramework
         public string PackageVersionOverride => packageVersionOverride?.Trim() ?? string.Empty;
         public int ManifestTimeout => Mathf.Max(1, manifestTimeout);
         public IReadOnlyList<string> RemoteRoots => remoteRoots ?? Array.Empty<string>();
-        public string RemoteMainRoot => GetRemoteRootByPriority(0);
-        public string RemoteFallbackRoot => GetRemoteRootByPriority(1);
+
         public string RemoteUrlTemplate => string.IsNullOrWhiteSpace(remoteUrlTemplate) ? "{Root}/{Platform}/{PackageName}/{FileName}" : remoteUrlTemplate.Trim();
         public string PlatformNameOverride => platformNameOverride?.Trim() ?? string.Empty;
-        public bool IsRemoteMainRootConfigured => string.IsNullOrWhiteSpace(RemoteMainRoot) == false && RemoteMainRoot.Contains("your-cdn-domain") == false;
         public bool DownloadPackage => downloadPackage;
         public int DownloadingMaxNumber => Mathf.Max(1, downloadingMaxNumber);
         public int FailedTryAgain => Mathf.Max(0, failedTryAgain);
+        public bool EnableBundleEncryption => enableBundleEncryption;
         public HomologousImageMode HomologousImageMode => homologousImageMode;
         public string AotMetadataAssetDirectory => NormalizeAssetDirectory(aotMetadataAssetDirectory, DefaultAotMetadataAssetDirectory);
         public IReadOnlyList<string> AotMetadataAssemblyNames => aotMetadataAssemblyNames ?? Array.Empty<string>();
@@ -99,25 +99,7 @@ namespace HotUpdateFramework
             return value.Replace('\\', '/').TrimEnd('/');
         }
 
-        private string GetRemoteRootByPriority(int priorityIndex)
-        {
-            if (remoteRoots == null || priorityIndex < 0)
-                return string.Empty;
 
-            int validIndex = 0;
-            foreach (string remoteRoot in remoteRoots)
-            {
-                if (string.IsNullOrWhiteSpace(remoteRoot))
-                    continue;
-
-                if (validIndex == priorityIndex)
-                    return remoteRoot.Trim();
-
-                validIndex++;
-            }
-
-            return string.Empty;
-        }
 
         private string[] BuildAotMetadataAssetLocations()
         {
