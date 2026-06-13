@@ -28,7 +28,7 @@ namespace HotUpdateFramework
         {
             Debug.LogError(Format(message));
         }
-
+        
         private static string Format(string message)
         {
             return $"{Prefix} {message}";

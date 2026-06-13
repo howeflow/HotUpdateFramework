@@ -23,7 +23,7 @@ public class BootController : MonoBehaviour
             UserData = this
         };
 
-        HotUpdateService.Instance.RunAsync(config, progress, this.GetCancellationTokenOnDestroy(), context).Forget();
+        HotUpdateService.Instance.RunAsync(config, progress, context, this.GetCancellationTokenOnDestroy()).Forget();
     }
 
     private void OnHotUpdateProgress(HotUpdateProgress value)

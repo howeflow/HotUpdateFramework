@@ -15,10 +15,12 @@ namespace HotUpdateFramework
         {
             _config = config;
             _packageName = packageName;
-            _platformName = HotUpdatePlatformUtility.GetPlatformName(config.PlatformNameOverride);
+            _platformName = HotUpdateUtility.GetPlatformName(config.PlatformNameOverride);
 
-            remoteMainRoot = GetRemoteRootByPriority(0);
-            remoteFallbackRoot = GetRemoteRootByPriority(1);
+            remoteMainRoot = HotUpdateUtility.GetRemoteRootByPriority(config.RemoteRoots, 0);
+            remoteFallbackRoot = HotUpdateUtility.GetRemoteRootByPriority(config.RemoteRoots, 1);
+
+            HotUpdateLogger.Log($"Remote URLs: main={remoteMainRoot}, fallback={remoteFallbackRoot}");
         }
 
         string IRemoteServices.GetRemoteMainURL(string fileName)
@@ -40,40 +42,7 @@ namespace HotUpdateFramework
                 .Replace("{PackageName}", _packageName)
                 .Replace("{FileName}", fileName ?? string.Empty);
 
-            return RemoveDuplicateSlashesAfterScheme(url);
-        }
-
-        private static string RemoveDuplicateSlashesAfterScheme(string url)
-        {
-            int schemeIndex = url.IndexOf("://", System.StringComparison.Ordinal);
-            if (schemeIndex < 0)
-                return url.Replace("//", "/");
-
-            string scheme = url.Substring(0, schemeIndex + 3);
-            string rest = url.Substring(schemeIndex + 3);
-            while (rest.Contains("//"))
-                rest = rest.Replace("//", "/");
-            return scheme + rest;
-        }
-        
-        private string GetRemoteRootByPriority(int priorityIndex) {
-            var remoteRoots = _config.RemoteRoots;
-            if (remoteRoots == null || priorityIndex < 0)
-                return string.Empty;
-
-            int validIndex = 0;
-            foreach (string remoteRoot in remoteRoots)
-            {
-                if (string.IsNullOrWhiteSpace(remoteRoot))
-                    continue;
-
-                if (validIndex == priorityIndex)
-                    return remoteRoot.Trim();
-
-                validIndex++;
-            }
-
-            return string.Empty;
+            return HotUpdateUtility.RemoveDuplicateSlashesAfterScheme(url);
         }
     }
 }

@@ -17,8 +17,6 @@
 5. 将 `DefaultPackage` 设置为默认资源包。
 6. 反射调用 `HotUpdate.HotUpdateEntry.Start`。
 
-是否下载整个包由 `HotUpdateConfig.asset` 里的 `downloadPackage` 控制，默认开启。
-
 运行时框架普通日志由 `HotUpdateConfig.asset` 里的 `enableRuntimeLog` 控制，默认开启。关闭后只隐藏热更阶段类的普通日志，下载失败和热更失败仍然会输出错误日志。
 
 自定义加解密时，直接实现 YooAsset 官方接口，并在构建热更包前和运行热更前注册到 `HotUpdateCryptoProvider`：
@@ -73,7 +71,8 @@ var context = new HotUpdateContext
     UserData = this
 };
 
-await HotUpdateService.Instance.RunAsync(config, progress, cancellationToken, context);
+var cancellationToken = this.GetCancellationTokenOnDestroy();
+await HotUpdateService.Instance.RunAsync(config, progress, context, cancellationToken);
 ```
 
 `HotUpdateProgress.Progress` 表示当前阶段进度。Loading 进度条如果需要完整 `0-1` 流程进度，建议在启动层根据 `HotUpdateProgress.Stage` 自己做映射，示例可参考 `Assets/Sample/BootController.cs`。
@@ -81,9 +80,9 @@ await HotUpdateService.Instance.RunAsync(config, progress, cancellationToken, co
 热更入口可以按需声明框架支持的参数，`HotUpdateContext` 会由 AOT 启动侧传入：
 
 ```csharp
-public static async UniTask Start(HotUpdateContext context, CancellationToken cancellationToken)
+public static async UniTask Start(HotUpdateContext context)
 {
-    await InitGameAsync(cancellationToken);
+    await InitGameAsync();
     context?.Complete();
 }
 ```
@@ -140,7 +139,7 @@ Build Player
 
 `Prepare All Process` 会执行 HybridCLR `Generate All`，同步 AOT 元数据程序集列表，并把热更 DLL 和 AOT 元数据 DLL 复制到配置的资源目录。
 
-修改AOT启动流程 / CDN 地址 / 播放模式 / 下载开关：
+修改AOT启动流程 / CDN 地址 / 播放模式：
 
 ```text
 Build Player

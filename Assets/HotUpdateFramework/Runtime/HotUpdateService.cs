@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -25,35 +24,36 @@ namespace HotUpdateFramework
         {
         }
 
-        public UniTask RunAsync(HotUpdateConfig config, HotUpdateContext context, IProgress<HotUpdateProgress> progress = null, CancellationToken cancellationToken = default)
-        {
-            return RunAsync(config, progress, cancellationToken, context);
-        }
-
-        public async UniTask RunAsync(HotUpdateConfig config, IProgress<HotUpdateProgress> progress = null, CancellationToken cancellationToken = default, HotUpdateContext context = null)
+        public async UniTask RunAsync(HotUpdateConfig config, IProgress<HotUpdateProgress> progress = null, HotUpdateContext context = null, CancellationToken cancellationToken = default)
         {
             if (config == null)
                 throw new ArgumentNullException(nameof(config));
 
+            cancellationToken.ThrowIfCancellationRequested();
             HotUpdateLogger.EnableLog = config.EnableRuntimeLog;
 
-            try
-            {
+            try {
+                HotUpdateLogger.Log(
+                    $"Start summary: package={config.PackageName}, playMode={config.PlayMode}, platform={HotUpdateUtility.GetPlatformName(config.PlatformNameOverride)}, versionOverride={(string.IsNullOrEmpty(config.PackageVersionOverride) ?"<empty>":config.PackageVersionOverride)}");
+                
                 Report(progress, HotUpdateStage.InitializeYooAsset, "Initialize YooAsset");
 
-                if (YooAssets.Initialized == false)
-                    YooAssets.Initialize();
+                YooAssets.Initialize();
 
-                Package = await InitializePackageAsync(config, config.PackageName, config.SetAsDefaultPackage, progress, cancellationToken);
+                Package = await InitializePackageAsync(config, config.PackageName, progress, cancellationToken);
                 PackageVersion = await RequestAndUpdateManifestAsync(config, Package, config.PackageVersionOverride, progress, cancellationToken);
-                if (config.DownloadPackage)
-                    await DownloadPackageAsync(Package, config, progress, cancellationToken);
+                await DownloadPackageAsync(Package, config, progress, cancellationToken);
 
                 await LoadAotMetadataAsync(config, Package, progress, cancellationToken);
                 await LoadHotUpdateAssembliesAsync(config, Package, progress, cancellationToken);
                 await InvokeEntryAsync(config, context, progress, cancellationToken);
 
                 Report(progress, HotUpdateStage.Completed, "Hot update completed", 1f);
+                HotUpdateLogger.Log($"Completed summary: package={Package.PackageName}, version={PackageVersion}, assemblies={_loadedAssemblies.Count}");
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -62,14 +62,12 @@ namespace HotUpdateFramework
             }
         }
 
-        private async UniTask<ResourcePackage> InitializePackageAsync(HotUpdateConfig config, string packageName, bool setAsDefaultPackage, IProgress<HotUpdateProgress> progress, CancellationToken cancellationToken)
+        private async UniTask<ResourcePackage> InitializePackageAsync(HotUpdateConfig config, string packageName, IProgress<HotUpdateProgress> progress, CancellationToken cancellationToken)
         {
             ResourcePackage package = YooAssets.TryGetPackage(packageName) ?? YooAssets.CreatePackage(packageName);
 
-            if (package.InitializeStatus == EOperationStatus.Succeed && package.PackageValid)
-            {
-                if (setAsDefaultPackage)
-                    YooAssets.SetDefaultPackage(package);
+            if (package.InitializeStatus == EOperationStatus.Succeed && package.PackageValid) {
+                YooAssets.SetDefaultPackage(package);
                 return package;
             }
 
@@ -78,8 +76,7 @@ namespace HotUpdateFramework
             await WaitOperationAsync(operation, HotUpdateStage.InitializeYooAsset, $"Initialize package {packageName}", progress, cancellationToken);
             EnsureSucceed(operation, $"Initialize YooAsset package {packageName}");
 
-            if (setAsDefaultPackage)
-                YooAssets.SetDefaultPackage(package);
+            YooAssets.SetDefaultPackage(package);
 
             return package;
         }
@@ -113,19 +110,8 @@ namespace HotUpdateFramework
                         CacheFileSystemParameters = FileSystemParameters.CreateDefaultCacheFileSystemParameters(remoteServices, decryptionServices)
                     };
 
-                case EPlayMode.WebPlayMode:
-                    if (decryptionServices != null)
-                        throw new HotUpdateException("Bundle encryption does not support WebPlayMode.");
-
-                    IRemoteServices webRemoteServices = new RemoteServices(config, packageName);
-                    return new WebPlayModeParameters
-                    {
-                        WebServerFileSystemParameters = FileSystemParameters.CreateDefaultWebServerFileSystemParameters(),
-                        WebRemoteFileSystemParameters = FileSystemParameters.CreateDefaultWebRemoteFileSystemParameters(webRemoteServices)
-                    };
-
                 default:
-                    throw new HotUpdateException($"Unsupported YooAsset play mode: {config.PlayMode}");
+                    throw new HotUpdateException($"Unsupported play mode: {config.PlayMode}");
             }
         }
 
@@ -165,13 +151,12 @@ namespace HotUpdateFramework
                 return;
             }
 
-            string totalSizeText = FormatBytes(downloader.TotalDownloadBytes);
+            string totalSizeText = HotUpdateUtility.FormatBytes(downloader.TotalDownloadBytes);
             Report(progress, HotUpdateStage.DownloadFiles, $"Need download {package.PackageName}: {downloader.TotalDownloadCount} files, {totalSizeText}");
 
-            downloader.DownloadUpdateCallback = data =>
-            {
-                string currentSizeText = FormatBytes(data.CurrentDownloadBytes);
-                string downloadMessage = $"Download {package.PackageName} {data.CurrentDownloadCount}/{data.TotalDownloadCount} {currentSizeText}/{FormatBytes(data.TotalDownloadBytes)}";
+            downloader.DownloadUpdateCallback = data => {
+                string currentSizeText = HotUpdateUtility.FormatBytes(data.CurrentDownloadBytes);
+                string downloadMessage = $"Download {package.PackageName} {data.CurrentDownloadCount}/{data.TotalDownloadCount} {currentSizeText}/{HotUpdateUtility.FormatBytes(data.TotalDownloadBytes)}";
                 progress?.Report(new HotUpdateProgress(
                     HotUpdateStage.DownloadFiles,
                     downloadMessage,
@@ -183,7 +168,7 @@ namespace HotUpdateFramework
             };
             downloader.DownloadErrorCallback = data =>
             {
-                HotUpdateLogger.Error($"Download failed: {data.FileName}, {data.ErrorInfo}");
+                HotUpdateLogger.Error($"Download failed: package={package.PackageName}, file={data.FileName}, error={data.ErrorInfo}");
             };
             downloader.DownloadFinishCallback = data =>
             {
@@ -192,7 +177,16 @@ namespace HotUpdateFramework
             };
 
             downloader.BeginDownload();
-            await WaitOperationAsync(downloader, HotUpdateStage.DownloadFiles, $"Download files {package.PackageName}", null, cancellationToken);
+            try
+            {
+                await WaitOperationAsync(downloader, HotUpdateStage.DownloadFiles, $"Download files {package.PackageName}", null, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                downloader.CancelDownload();
+                throw;
+            }
+
             EnsureSucceed(downloader, $"Download YooAsset files {package.PackageName}");
         }
 
@@ -233,7 +227,7 @@ namespace HotUpdateFramework
                 if (string.IsNullOrWhiteSpace(location))
                     continue;
 
-                string assemblyName = GetAssemblyNameFromLocation(location);
+                string assemblyName = HotUpdateUtility.GetAssemblyNameFromLocation(location);
                 Assembly assembly = TryGetLoadedEditorAssembly(assemblyName);
                 if (assembly == null)
                 {
@@ -348,55 +342,31 @@ namespace HotUpdateFramework
 
         private static async UniTask WaitOperationAsync(AsyncOperationBase operation, HotUpdateStage stage, string message, IProgress<HotUpdateProgress> progress, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             while (operation.IsDone == false)
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 progress?.Report(new HotUpdateProgress(stage, message, operation.Progress));
                 await UniTask.Yield(cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
         private static async UniTask WaitHandleAsync(HandleBase handle, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             while (handle.IsDone == false)
             {
-                cancellationToken.ThrowIfCancellationRequested();
                 await UniTask.Yield(cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
         private static void EnsureSucceed(AsyncOperationBase operation, string action)
         {
             if (operation.Status != EOperationStatus.Succeed)
                 throw new HotUpdateException($"{action} failed: {operation.Error}");
-        }
-
-        private static string GetAssemblyNameFromLocation(string location)
-        {
-            string fileName = Path.GetFileName(location);
-            if (fileName.EndsWith(".bytes", StringComparison.OrdinalIgnoreCase))
-                fileName = fileName.Substring(0, fileName.Length - ".bytes".Length);
-            if (fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                fileName = fileName.Substring(0, fileName.Length - ".dll".Length);
-            return fileName;
-        }
-
-        private static string FormatBytes(long bytes)
-        {
-            const double unit = 1024d;
-            if (bytes < unit)
-                return $"{bytes} B";
-
-            double value = bytes;
-            string[] units = { "KB", "MB", "GB" };
-            for (int i = 0; i < units.Length; i++)
-            {
-                value /= unit;
-                if (value < unit || i == units.Length - 1)
-                    return $"{value:0.##} {units[i]}";
-            }
-
-            return $"{bytes} B";
         }
 
         private static Assembly TryGetLoadedEditorAssembly(string assemblyName)
@@ -412,6 +382,7 @@ namespace HotUpdateFramework
         private static void Report(IProgress<HotUpdateProgress> progress, HotUpdateStage stage, string message, float value = 0f)
         {
             progress?.Report(new HotUpdateProgress(stage, message, value));
+
             string logMessage = $"{stage}: {message}";
             if (stage == HotUpdateStage.Failed)
                 HotUpdateLogger.Error(logMessage);

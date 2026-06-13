@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7d3c35a7d7f345d5a93a4a6ce72018f2, type: 3}
   m_Name: HotUpdateConfig
   m_EditorClassIdentifier: 
+  enableRuntimeLog: 1
   packageName: DefaultPackage
   playMode: 2
-  setAsDefaultPackage: 1
   useBuildinFileSystemInHostMode: 0
   packageVersionOverride: 
   manifestTimeout: 10
@@ -24,10 +24,8 @@ MonoBehaviour:
   - https://your-cdn-domain.example.com/hotupdate/release
   remoteUrlTemplate: '{Root}/{Platform}/{PackageName}/{FileName}'
   platformNameOverride: 
-  downloadPackage: 1
   downloadingMaxNumber: 8
   failedTryAgain: 3
-  enableRuntimeLog: 1
   homologousImageMode: 1
   aotMetadataAssetDirectory: Assets/HotUpdateAssets/Assemblies/AOT
   aotMetadataAssemblyNames:

@@ -40,7 +40,7 @@ namespace HotUpdateFramework.Editor
             }
 
             string[] hybridClrPatchAotAssemblyNames = aotMetadataAssemblyNames
-                .Select(RemoveDllExtension)
+                .Select(HotUpdateUtility.RemoveDllExtension)
                 .ToArray();
 
             bool configChanged = SyncStringArrayProperty(config, "aotMetadataAssemblyNames", aotMetadataAssemblyNames);
@@ -92,7 +92,7 @@ namespace HotUpdateFramework.Editor
                 if (string.IsNullOrWhiteSpace(location))
                     continue;
 
-                string dllFileName = GetDllFileNameFromAssetLocation(location);
+                string dllFileName = HotUpdateUtility.GetDllFileNameFromAssetLocation(location);
                 string sourcePath = Path.GetFullPath(Path.Combine(hotUpdateDllOutputDirectory, dllFileName));
                 if (File.Exists(sourcePath) == false)
                     throw new FileNotFoundException($"Hot update DLL not found: {sourcePath}", sourcePath);
@@ -114,7 +114,7 @@ namespace HotUpdateFramework.Editor
                 if (string.IsNullOrWhiteSpace(location))
                     continue;
 
-                string sourcePath = Path.GetFullPath(Path.Combine(hotUpdateDllOutputDirectory, GetDllFileNameFromAssetLocation(location)));
+                string sourcePath = Path.GetFullPath(Path.Combine(hotUpdateDllOutputDirectory, HotUpdateUtility.GetDllFileNameFromAssetLocation(location)));
                 if (HotUpdateEditorUtility.CopyIfExists(sourcePath, location))
                     copiedCount++;
             }
@@ -131,7 +131,7 @@ namespace HotUpdateFramework.Editor
                 if (string.IsNullOrWhiteSpace(location))
                     continue;
 
-                string sourcePath = Path.GetFullPath(Path.Combine(aotMetadataDirectory, GetDllFileNameFromAssetLocation(location)));
+                string sourcePath = Path.GetFullPath(Path.Combine(aotMetadataDirectory, HotUpdateUtility.GetDllFileNameFromAssetLocation(location)));
                 if (HotUpdateEditorUtility.CopyIfExists(sourcePath, location))
                     copiedCount++;
             }
@@ -141,10 +141,7 @@ namespace HotUpdateFramework.Editor
 
         public static string GetDllFileNameFromAssetLocation(string assetLocation)
         {
-            string fileName = Path.GetFileName(assetLocation);
-            if (fileName.EndsWith(".bytes", StringComparison.OrdinalIgnoreCase))
-                fileName = fileName.Substring(0, fileName.Length - ".bytes".Length);
-            return fileName;
+            return HotUpdateUtility.GetDllFileNameFromAssetLocation(assetLocation);
         }
 
         private static string GetAotGenericReferencesFullPath()
@@ -171,7 +168,7 @@ namespace HotUpdateFramework.Editor
             MatchCollection matches = Regex.Matches(listMatch.Groups["body"].Value, "\"(?<name>[^\"]+)\"");
             foreach (Match match in matches)
             {
-                string assemblyName = NormalizeDllAssemblyName(match.Groups["name"].Value);
+                string assemblyName = HotUpdateUtility.NormalizeDllAssemblyName(match.Groups["name"].Value);
                 if (string.IsNullOrWhiteSpace(assemblyName))
                     continue;
 
@@ -217,30 +214,6 @@ namespace HotUpdateFramework.Editor
             return true;
         }
 
-        private static string RemoveDllExtension(string assemblyName)
-        {
-            if (assemblyName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                return assemblyName.Substring(0, assemblyName.Length - ".dll".Length);
-
-            return assemblyName;
-        }
-
-        private static string NormalizeDllAssemblyName(string assemblyName)
-        {
-            if (string.IsNullOrWhiteSpace(assemblyName))
-                return string.Empty;
-
-            string fileName = Path.GetFileName(assemblyName.Trim().Replace('\\', '/'));
-            if (fileName.EndsWith(".bytes", StringComparison.OrdinalIgnoreCase))
-                fileName = fileName.Substring(0, fileName.Length - ".bytes".Length);
-
-            if (fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) == false)
-                fileName += ".dll";
-
-            return fileName;
-        }
-        
-        
         public static void BuildPackage()
         {
             HotUpdateConfig config = HotUpdateEditorUtility.GetOrCreateConfig();
