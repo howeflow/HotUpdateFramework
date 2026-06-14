@@ -8,42 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
-
-VALID_PLATFORMS = {
-    "Android",
-    "iOS",
-    "WebGL",
-    "StandaloneWindows64",
-    "StandaloneOSX",
-    "StandaloneLinux64",
-}
-
-
-def load_json(path):
-    if not path.exists():
-        return {}
-
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
-
-
-def config_value(config, name, cli_value=None, default=None):
-    if cli_value is not None:
-        if not isinstance(cli_value, str) or cli_value.strip():
-            return cli_value
-
-    value = config.get(name)
-    if value is not None:
-        return value
-
-    return default
-
-
-def config_bool(config, name, default=False):
-    value = config.get(name)
-    if value is None:
-        return default
-    return bool(value)
+from tool_config import config_bool, config_value, load_config
 
 
 def resolve_project_path(project_root, value):
@@ -147,12 +112,12 @@ def ensure_child_path(root, child):
         raise RuntimeError(f"Destination is outside CDN root: {child}")
 
 
-def find_latest_package_directory(build_output_root, platform, package_name):
-    package_root = build_output_root / platform / package_name
+def find_latest_package_directory(package_root):
     if not package_root.exists():
         raise RuntimeError(f"Package build root does not exist: {package_root}")
 
     candidates = []
+    package_name = package_root.name
     version_file_name = f"{package_name}.version"
     for child in package_root.iterdir():
         if not child.is_dir():
@@ -169,25 +134,19 @@ def find_latest_package_directory(build_output_root, platform, package_name):
     return candidates[0]
 
 
+def resolve_package_source(project_root, platform, package_name):
+    package_root = project_root / "Bundles" / platform / package_name
+    return find_latest_package_directory(package_root), platform, package_name
+
+
 def publish_local_cdn(project_root, publish_config_path, cdn_root_override=None):
-    config = load_json(publish_config_path)
-    package_name = str(config.get("PackageName", "DefaultPackage")).strip() or "DefaultPackage"
-    platform = str(config.get("Platform", "Android")).strip() or "Android"
-    build_output_root = resolve_project_path(project_root, config.get("BuildOutputRoot", "Bundles"))
-    cdn_root = resolve_project_path(project_root, cdn_root_override or config.get("CdnRootDirectory", "LocalCdn"))
-    package_directory_value = config.get("PackageDirectory")
-    clean_destination = bool(config.get("CleanDestination", False))
+    config = load_config(publish_config_path)
+    cdn_root = resolve_project_path(project_root, cdn_root_override or config_value(config, "CdnRootDirectory", default="LocalCdn"))
+    platform = str(config_value(config, "Platform", default="Android")).strip() or "Android"
+    package_name = str(config_value(config, "PackageName", default="DefaultPackage")).strip() or "DefaultPackage"
+    clean_destination = config_bool(config, "CleanDestination", False)
 
-    if platform not in VALID_PLATFORMS:
-        raise RuntimeError(f"Invalid platform '{platform}'. Valid values: {', '.join(sorted(VALID_PLATFORMS))}")
-
-    if package_directory_value:
-        source = resolve_project_path(project_root, package_directory_value)
-    else:
-        source = find_latest_package_directory(build_output_root, platform, package_name)
-
-    if not source.exists():
-        raise RuntimeError(f"Package directory does not exist: {source}")
+    source, platform, package_name = resolve_package_source(project_root, platform, package_name)
 
     destination = (cdn_root / platform / package_name).resolve()
     ensure_child_path(cdn_root, destination)
@@ -286,6 +245,19 @@ def collect_local_files(cdn_root):
         files.append((path, relative_path))
     files.sort(key=lambda item: item[1])
     return files
+
+
+def find_version_test_path(cdn_root):
+    version_files = []
+    for path in cdn_root.rglob("*.version"):
+        if path.is_file():
+            version_files.append(path)
+
+    if not version_files:
+        return ""
+
+    version_files.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    return version_files[0].relative_to(cdn_root).as_posix()
 
 
 def file_md5(path):
@@ -504,7 +476,6 @@ def parse_args():
     parser.add_argument("--cdn-root-directory", default=None)
     parser.add_argument("--bucket-name", default=None)
     parser.add_argument("--account-id", default=None)
-    parser.add_argument("--endpoint-url", default=None)
     parser.add_argument("--prefix", default=None, help="R2 object prefix to use. Overrides Prefixes in config.")
     parser.add_argument("--aws-profile", default=None)
     parser.add_argument("--delete-remote", action="store_true", default=None)
@@ -513,7 +484,6 @@ def parse_args():
     parser.add_argument("--skip-local-publish", action="store_true", default=None)
     parser.add_argument("--publish-config-path", default=None)
     parser.add_argument("--public-root", default=None)
-    parser.add_argument("--version-test-path", default=None)
     parser.add_argument("--dry-run", action="store_true", default=None)
     parser.add_argument("--incremental-upload", action="store_true", default=None)
     parser.add_argument("--upload-all", action="store_true", default=None)
@@ -529,7 +499,7 @@ def get_config_path(script_dir, project_root, args):
     if args.config_path:
         return resolve_project_path(project_root, args.config_path)
 
-    return script_dir / "r2_cdn_sync.config.json"
+    return script_dir / "r2_cdn_sync.env"
 
 
 def get_pause_on_exit(config, args):
@@ -555,17 +525,16 @@ def main(args):
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     config_path = get_config_path(script_dir, project_root, args)
-    config = load_json(config_path)
+    config = load_config(config_path)
 
     cdn_root_directory = config_value(config, "CdnRootDirectory", args.cdn_root_directory, "LocalCdn")
     bucket_name = str(config_value(config, "BucketName", args.bucket_name, "")).strip()
     account_id = str(config_value(config, "AccountId", args.account_id, "")).strip()
-    endpoint_url = str(config_value(config, "EndpointUrl", args.endpoint_url, "")).strip()
     prefix = select_prefix(config, args.prefix)
     aws_profile = str(config_value(config, "AwsProfile", args.aws_profile, "")).strip()
-    publish_config_path = config_value(config, "PublishConfigPath", args.publish_config_path, "Tools/local_cdn_server.config.json")
+    publish_config_path = config_value(config, "PublishConfigPath", args.publish_config_path, "Tools/local_cdn_server.env")
     public_root = str(config_value(config, "PublicRoot", args.public_root, "")).strip()
-    version_test_path = str(config_value(config, "VersionTestPath", args.version_test_path, "Android/DefaultPackage/DefaultPackage.version")).strip()
+    version_test_path = ""
     sync_manifest_file_name = str(config_value(config, "SyncManifestFileName", args.sync_manifest_file_name, ".r2-sync-manifest.json")).strip().replace("\\", "/").strip("/")
 
     delete_remote = config_bool(config, "DeleteRemote", False)
@@ -599,10 +568,10 @@ def main(args):
     if is_placeholder(bucket_name):
         raise RuntimeError(f"R2 bucket name is empty. Edit {config_path} or pass --bucket-name.")
 
-    if not endpoint_url:
-        if is_placeholder(account_id):
-            raise RuntimeError(f"R2 account id is empty. Edit {config_path}, pass --account-id, or pass --endpoint-url.")
-        endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
+    if is_placeholder(account_id):
+        raise RuntimeError(f"R2 account id is empty. Edit {config_path} or pass --account-id.")
+
+    endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
 
     s3 = create_s3_client(endpoint_url, aws_profile, interactive_credentials)
     cdn_root = resolve_project_path(project_root, cdn_root_directory)
@@ -616,6 +585,9 @@ def main(args):
 
     if not cdn_root.exists():
         raise RuntimeError(f"CDN root directory does not exist: {cdn_root}")
+
+    if not version_test_path:
+        version_test_path = find_version_test_path(cdn_root)
 
     local_files = collect_local_files(cdn_root)
     local_keys = {build_s3_key(prefix, relative_path) for _, relative_path in local_files}
@@ -676,7 +648,7 @@ def main(args):
     elif manifest_bytes:
         print(f"  Manifest:    {format_bytes(manifest_bytes)}")
 
-    if public_root and "pub-xxxx" not in public_root:
+    if public_root and "pub-xxxx" not in public_root and version_test_path:
         print("  Version test URL:")
         print(f"  {join_url(public_root, prefix, version_test_path)}")
 
@@ -685,7 +657,7 @@ if __name__ == "__main__":
     args = parse_args()
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    config = load_json(get_config_path(script_dir, project_root, args))
+    config = load_config(get_config_path(script_dir, project_root, args))
     pause_on_exit = get_pause_on_exit(config, args)
     exit_code = 0
 

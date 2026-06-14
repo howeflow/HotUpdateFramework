@@ -1,6 +1,5 @@
 import argparse
 import functools
-import json
 import os
 import shutil
 import socket
@@ -8,42 +7,7 @@ import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-
-VALID_PLATFORMS = {
-    "Android",
-    "iOS",
-    "WebGL",
-    "StandaloneWindows64",
-    "StandaloneOSX",
-    "StandaloneLinux64",
-}
-
-
-def load_json(path):
-    if not path.exists():
-        return {}
-
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
-
-
-def config_value(config, name, cli_value=None, default=None):
-    if cli_value is not None:
-        if not isinstance(cli_value, str) or cli_value.strip():
-            return cli_value
-
-    value = config.get(name)
-    if value is not None:
-        return value
-
-    return default
-
-
-def config_bool(config, name, default=False):
-    value = config.get(name)
-    if value is None:
-        return default
-    return bool(value)
+from tool_config import config_bool, config_value, load_config
 
 
 def resolve_project_path(project_root, value):
@@ -65,12 +29,12 @@ def ensure_child_path(root, child):
         raise RuntimeError(f"Destination is outside CDN root: {child}")
 
 
-def find_latest_package_directory(build_output_root, platform, package_name):
-    package_root = build_output_root / platform / package_name
+def find_latest_package_directory(package_root):
     if not package_root.exists():
         raise RuntimeError(f"Package build root does not exist: {package_root}")
 
     candidates = []
+    package_name = package_root.name
     version_file_name = f"{package_name}.version"
     for child in package_root.iterdir():
         if not child.is_dir():
@@ -87,37 +51,29 @@ def find_latest_package_directory(build_output_root, platform, package_name):
     return candidates[0]
 
 
+def resolve_package_source(project_root, platform, package_name):
+    package_root = project_root / "Bundles" / platform / package_name
+    return find_latest_package_directory(package_root), platform, package_name
+
+
 def publish_local_cdn(
     project_root,
     config_path,
-    package_directory=None,
     cdn_root_directory=None,
     platform=None,
     package_name=None,
-    build_output_root=None,
     clean_destination=None,
 ):
-    config = load_json(config_path)
+    config = load_config(config_path)
 
-    package_name = str(config_value(config, "PackageName", package_name, "DefaultPackage")).strip() or "DefaultPackage"
-    platform = str(config_value(config, "Platform", platform, "Android")).strip() or "Android"
-    build_output_root = resolve_project_path(project_root, config_value(config, "BuildOutputRoot", build_output_root, "Bundles"))
     cdn_root = resolve_project_path(project_root, config_value(config, "CdnRootDirectory", cdn_root_directory, "LocalCdn"))
-    package_directory = config_value(config, "PackageDirectory", package_directory, None)
+    platform = str(config_value(config, "Platform", platform, "Android")).strip() or "Android"
+    package_name = str(config_value(config, "PackageName", package_name, "DefaultPackage")).strip() or "DefaultPackage"
 
     if clean_destination is None:
         clean_destination = config_bool(config, "CleanDestination", False)
 
-    if platform not in VALID_PLATFORMS:
-        raise RuntimeError(f"Invalid platform '{platform}'. Valid values: {', '.join(sorted(VALID_PLATFORMS))}")
-
-    if package_directory:
-        source = resolve_project_path(project_root, package_directory)
-    else:
-        source = find_latest_package_directory(build_output_root, platform, package_name)
-
-    if not source.exists():
-        raise RuntimeError(f"Package directory does not exist: {source}")
+    source, platform, package_name = resolve_package_source(project_root, platform, package_name)
 
     destination = (cdn_root / platform / package_name).resolve()
     ensure_child_path(cdn_root, destination)
@@ -210,11 +166,9 @@ def start_local_server(cdn_root, host, port, test_path):
 def parse_args():
     parser = argparse.ArgumentParser(description="Publish latest YooAsset package directory to a local CDN root.")
     parser.add_argument("--config-path", default=None)
-    parser.add_argument("--package-directory", default=None)
     parser.add_argument("--cdn-root-directory", default=None)
-    parser.add_argument("--platform", choices=sorted(VALID_PLATFORMS), default=None)
+    parser.add_argument("--platform", default=None)
     parser.add_argument("--package-name", default=None)
-    parser.add_argument("--build-output-root", default=None)
     parser.add_argument("--clean-destination", action="store_true", default=None)
     parser.add_argument("--keep-destination", action="store_true", default=None)
     parser.add_argument("--start-local-server", action="store_true", default=None)
@@ -231,7 +185,7 @@ def get_config_path(script_dir, project_root, args):
     if args.config_path:
         return resolve_project_path(project_root, args.config_path)
 
-    return script_dir / "local_cdn_server.config.json"
+    return script_dir / "local_cdn_server.env"
 
 
 def get_pause_on_exit(config, args):
@@ -257,7 +211,7 @@ def main(args):
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     config_path = get_config_path(script_dir, project_root, args)
-    config = load_json(config_path)
+    config = load_config(config_path)
 
     clean_destination = None
     if args.clean_destination:
@@ -268,11 +222,9 @@ def main(args):
     destination = publish_local_cdn(
         project_root=project_root,
         config_path=config_path,
-        package_directory=args.package_directory,
         cdn_root_directory=args.cdn_root_directory,
         platform=args.platform,
         package_name=args.package_name,
-        build_output_root=args.build_output_root,
         clean_destination=clean_destination,
     )
 
@@ -286,7 +238,8 @@ def main(args):
         cdn_root = destination.parent.parent
         host = str(config_value(config, "LocalServerHost", args.local_server_host, "0.0.0.0")).strip() or "0.0.0.0"
         port = int(config_value(config, "LocalServerPort", args.local_server_port, 8080))
-        test_path = config_value(config, "LocalServerTestPath", args.local_server_test_path, "Android/DefaultPackage/DefaultPackage.version")
+        default_test_path = f"{destination.parent.name}/{destination.name}/{destination.name}.version"
+        test_path = config_value(config, "LocalServerTestPath", args.local_server_test_path, default_test_path)
         start_local_server(cdn_root, host, port, test_path)
 
 
@@ -294,7 +247,7 @@ if __name__ == "__main__":
     args = parse_args()
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    config = load_json(get_config_path(script_dir, project_root, args))
+    config = load_config(get_config_path(script_dir, project_root, args))
     pause_on_exit = get_pause_on_exit(config, args)
     exit_code = 0
 

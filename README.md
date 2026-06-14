@@ -218,7 +218,7 @@ https://cdn.example.com/hotupdate/dev/Android/DefaultPackage/<YooAssetFileName>
         <YooAsset输出文件>
 ```
 
-本地发布默认读取 `Tools/local_cdn_server.config.json`：
+本地发布默认读取 `Tools/local_cdn_server.env`：
 
 ```powershell
 python .\Tools\local_cdn_server.py
@@ -226,22 +226,18 @@ python .\Tools\local_cdn_server.py
 
 默认配置如下：
 
-```json
-{
-  "BuildOutputRoot": "Bundles",
-  "CdnRootDirectory": "LocalCdn",
-  "Platform": "Android",
-  "PackageName": "DefaultPackage",
-  "CleanDestination": true,
-  "StartLocalServer": false,
-  "LocalServerHost": "0.0.0.0",
-  "LocalServerPort": 8080,
-  "LocalServerTestPath": "Android/DefaultPackage/DefaultPackage.version",
-  "PauseOnExit": true
-}
+```ini
+CdnRootDirectory=LocalCdn
+Platform=Android
+PackageName=DefaultPackage
+CleanDestination=true
+StartLocalServer=true
+LocalServerHost=0.0.0.0
+LocalServerPort=8080
+PauseOnExit=true
 ```
 
-脚本会自动从 `Bundles/Android/DefaultPackage` 下寻找最新的 YooAsset 版本目录，并复制到：
+脚本会根据 `Platform` 和 `PackageName` 推导 YooAsset 输出目录 `Bundles/<Platform>/<PackageName>`，从里面寻找最新的 YooAsset 版本目录，然后复制到：
 
 ```text
 LocalCdn/Android/DefaultPackage
@@ -249,12 +245,10 @@ LocalCdn/Android/DefaultPackage
 
 本地模拟 CDN 可以在配置里开启自动启动服务：
 
-```json
-{
-  "StartLocalServer": true,
-  "LocalServerHost": "0.0.0.0",
-  "LocalServerPort": 8080
-}
+```ini
+StartLocalServer=true
+LocalServerHost=0.0.0.0
+LocalServerPort=8080
 ```
 
 开启后执行发布脚本会直接启动 HTTP 服务，终端保持运行，按 `Ctrl+C` 停止。命令行可以临时开启：
@@ -271,10 +265,8 @@ http://127.0.0.1:8080
 
 发布到真实源站时，调整配置里的 `CdnRootDirectory`，例如：
 
-```json
-{
-  "CdnRootDirectory": "D:/CdnOrigin/hotupdate"
-}
+```ini
+CdnRootDirectory=D:/CdnOrigin/hotupdate
 ```
 
 然后把公网地址放到 `remoteRoots` 第一位，例如：
@@ -286,7 +278,7 @@ https://cdn.example.com/hotupdate/dev
 命令行参数可临时覆盖配置：
 
 ```powershell
-python .\Tools\local_cdn_server.py --platform iOS --cdn-root-directory "D:\CdnOrigin\hotupdate"
+python .\Tools\local_cdn_server.py --platform iOS --package-name DefaultPackage --cdn-root-directory "D:\CdnOrigin\hotupdate"
 ```
 
 脚本结束后会等待回车关闭终端。命令行连续执行时可以关闭等待：
@@ -294,8 +286,6 @@ python .\Tools\local_cdn_server.py --platform iOS --cdn-root-directory "D:\CdnOr
 ```powershell
 python .\Tools\local_cdn_server.py --no-pause-on-exit
 ```
-
-`Platform` 必须和 YooAsset 输出的平台目录完全一致，例如 `Android`，不要写成 `Andorid`。
 
 脚本会复制到：
 
@@ -307,7 +297,7 @@ python .\Tools\local_cdn_server.py --no-pause-on-exit
 
 ## Cloudflare R2 模拟
 
-`Tools/sync_cdn_to_r2.py` 用 Python 将 `LocalCdn` 同步到 Cloudflare R2。密钥不写入项目配置，使用环境变量或 AWS Profile 提供。
+`Tools/sync_cdn_to_r2.py` 用 Python 将 `LocalCdn` 同步到 Cloudflare R2。密钥不写入项目配置，默认使用环境变量或运行时输入。
 
 安装 Python 依赖：
 
@@ -315,30 +305,22 @@ python .\Tools\local_cdn_server.py --no-pause-on-exit
 python -m pip install -r .\Tools\requirements-r2.txt
 ```
 
-配置 `Tools/r2_cdn_sync.config.json`：
+配置 `Tools/r2_cdn_sync.env`：
 
-```json
-{
-  "CdnRootDirectory": "LocalCdn",
-  "BucketName": "your-r2-bucket",
-  "AccountId": "your-cloudflare-account-id",
-  "EndpointUrl": "",
-  "Prefixes": [
-    "dev",
-    "release"
-  ],
-  "AwsProfile": "",
-  "DeleteRemote": false,
-  "PublishLocalFirst": true,
-  "PublishConfigPath": "Tools/local_cdn_server.config.json",
-  "PublicRoot": "https://pub-xxxx.r2.dev",
-  "VersionTestPath": "Android/DefaultPackage/DefaultPackage.version",
-  "DryRun": false,
-  "IncrementalUpload": true,
-  "SyncManifestFileName": ".r2-sync-manifest.json",
-  "InteractiveCredentials": true,
-  "PauseOnExit": true
-}
+```ini
+CdnRootDirectory=LocalCdn
+BucketName=your-r2-bucket
+AccountId=your-cloudflare-account-id
+Prefixes=dev,release
+DeleteRemote=false
+PublishLocalFirst=true
+PublishConfigPath=Tools/local_cdn_server.env
+PublicRoot=https://pub-xxxx.r2.dev
+DryRun=false
+IncrementalUpload=true
+SyncManifestFileName=.r2-sync-manifest.json
+InteractiveCredentials=true
+PauseOnExit=true
 ```
 
 执行同步时，脚本会在当前终端提示输入 R2 S3 API 密钥：
@@ -370,7 +352,7 @@ $env:AWS_SECRET_ACCESS_KEY="R2 Secret Access Key"
 python .\Tools\sync_cdn_to_r2.py
 ```
 
-脚本会先按 `local_cdn_server.config.json` 刷新 `LocalCdn`，再同步到：
+脚本会先按 `local_cdn_server.env` 刷新 `LocalCdn`，再同步到：
 
 ```text
 s3://<BucketName>/<SelectedPrefix>
@@ -401,7 +383,5 @@ remoteRoots[1] = https://pub-xxxx.r2.dev/dev
 - 真机联机更新建议使用 `HostPlayMode`，并确保源站目录结构和 URL 模板一致。
 - 项目按强联网流程处理热更。没有网络或源站不可用时，版本和清单请求会按 `manifestTimeout` 超时失败，启动层应显示重试、退出或检查网络，不走离线缓存进游戏。
 - `useBuildinFileSystemInHostMode` 只有在重新执行 `Hot Update/Build YooAsset Package` 并重新打 App 包后才对真机首包生效；只在运行时勾选但没有生成 `StreamingAssets/DefaultPackage`，会导致内置 catalog 或清单缺失。
-- 资源加密由 `HotUpdateFramework.Runtime` 里的 `HotUpdateCryptoProvider` 注册 YooAsset `IEncryptionServices` 和 `IDecryptionServices` 决定。注册了解密服务时，当前没有接入 WebPlayMode 解密。
-- `Hot Update/Clear/Build Cache` 对齐 YooAsset Builder 的 `Clear Build Cache`，会清理 Scriptable Build Pipeline 缓存，并删除当前平台当前包的构建目录 `Bundles/<Platform>/<PackageName>`。
-- Editor 模拟模式依赖 `AssetBundleCollectorSetting.asset` 里存在 `DefaultPackage`。框架不在启动模拟构建前自动修改 Collector 配置。
-- 业务资源默认放进 `Assets/HotUpdateAssets/Res`，运行时可以通过 `YooAssets.GetPackage("DefaultPackage")` 或默认包加载。
+- 资源加密由 `HotUpdateCryptoProvider` 注册 YooAsset `IEncryptionServices` 和 `IDecryptionServices` 决定。
+- Editor 模拟模式依赖 `AssetBundleCollectorSetting.asset` 里存在 `DefaultPackage`。
