@@ -228,6 +228,7 @@ python .\Tools\local_cdn_server.py
 
 ```ini
 CdnRootDirectory=LocalCdn
+BuildOutputRoot=Bundles
 Platform=Android
 PackageName=DefaultPackage
 CleanDestination=true
@@ -237,7 +238,7 @@ LocalServerPort=8080
 PauseOnExit=true
 ```
 
-脚本会根据 `Platform` 和 `PackageName` 推导 YooAsset 输出目录 `Bundles/<Platform>/<PackageName>`，从里面寻找最新的 YooAsset 版本目录，然后复制到：
+脚本会根据 `BuildOutputRoot`、`Platform` 和 `PackageName` 推导 YooAsset 输出目录 `<BuildOutputRoot>/<Platform>/<PackageName>`，从里面寻找最新的 YooAsset 版本目录，然后复制到：
 
 ```text
 LocalCdn/Android/DefaultPackage
@@ -297,7 +298,7 @@ python .\Tools\local_cdn_server.py --no-pause-on-exit
 
 ## Cloudflare R2 模拟
 
-`Tools/sync_cdn_to_r2.py` 用 Python 将 `LocalCdn` 同步到 Cloudflare R2。密钥不写入项目配置，默认使用环境变量或运行时输入。
+`Tools/r2_cdn_sync.py` 用 Python 将 `LocalCdn` 同步到 Cloudflare R2。密钥不写入项目配置，默认使用环境变量或运行时输入。
 
 安装 Python 依赖：
 
@@ -326,7 +327,7 @@ PauseOnExit=true
 执行同步时，脚本会在当前终端提示输入 R2 S3 API 密钥：
 
 ```powershell
-python .\Tools\sync_cdn_to_r2.py
+python .\Tools\r2_cdn_sync.py
 ```
 
 如果 `Prefixes` 配置了多个前缀，脚本会先让你选择要同步到哪个目录：
@@ -341,15 +342,15 @@ Prefix [1-2, default 1]:
 也可以在命令行里直接指定，适合接 CI 或固定发布目标：
 
 ```powershell
-python .\Tools\sync_cdn_to_r2.py --prefix release
-```
+python .\Tools\r2_cdn_sync.py --prefix release
+```[local_cdn_server.env](Tools/local_cdn_server.env)
 
 也可以提前在终端设置环境变量，脚本检测到后不会再次询问：
 
 ```powershell
 $env:AWS_ACCESS_KEY_ID="R2 Access Key ID"
 $env:AWS_SECRET_ACCESS_KEY="R2 Secret Access Key"
-python .\Tools\sync_cdn_to_r2.py
+python .\Tools\r2_cdn_sync.py
 ```
 
 脚本会先按 `local_cdn_server.env` 刷新 `LocalCdn`，再同步到：
@@ -361,7 +362,7 @@ s3://<BucketName>/<SelectedPrefix>
 `IncrementalUpload` 开启时，脚本会在本地生成同步清单，并上传到 R2 的 `<SelectedPrefix>/.r2-sync-manifest.json`。下次同步会先读取所选前缀下的远程清单，按文件相对路径、大小和 MD5 判断是否变化，只上传新增或变化的文件。第一次远程没有同步清单时，脚本会退回使用 R2 对象列表做比对；执行后会写入同步清单，后续同步就会走清单比对。命令行可以临时关闭增量上传：
 
 ```powershell
-python .\Tools\sync_cdn_to_r2.py --upload-all
+python .\Tools\r2_cdn_sync.py --upload-all
 ```
 
 R2 公开访问地址对应填到 `HotUpdateConfig.asset`：

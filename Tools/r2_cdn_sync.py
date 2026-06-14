@@ -134,19 +134,20 @@ def find_latest_package_directory(package_root):
     return candidates[0]
 
 
-def resolve_package_source(project_root, platform, package_name):
-    package_root = project_root / "Bundles" / platform / package_name
+def resolve_package_source(project_root, build_output_root, platform, package_name):
+    package_root = resolve_project_path(project_root, build_output_root) / platform / package_name
     return find_latest_package_directory(package_root), platform, package_name
 
 
 def publish_local_cdn(project_root, publish_config_path, cdn_root_override=None):
     config = load_config(publish_config_path)
     cdn_root = resolve_project_path(project_root, cdn_root_override or config_value(config, "CdnRootDirectory", default="LocalCdn"))
+    build_output_root = config_value(config, "BuildOutputRoot", default="Bundles")
     platform = str(config_value(config, "Platform", default="Android")).strip() or "Android"
     package_name = str(config_value(config, "PackageName", default="DefaultPackage")).strip() or "DefaultPackage"
     clean_destination = config_bool(config, "CleanDestination", False)
 
-    source, platform, package_name = resolve_package_source(project_root, platform, package_name)
+    source, platform, package_name = resolve_package_source(project_root, build_output_root, platform, package_name)
 
     destination = (cdn_root / platform / package_name).resolve()
     ensure_child_path(cdn_root, destination)

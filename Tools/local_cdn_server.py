@@ -51,8 +51,8 @@ def find_latest_package_directory(package_root):
     return candidates[0]
 
 
-def resolve_package_source(project_root, platform, package_name):
-    package_root = project_root / "Bundles" / platform / package_name
+def resolve_package_source(project_root, build_output_root, platform, package_name):
+    package_root = resolve_project_path(project_root, build_output_root) / platform / package_name
     return find_latest_package_directory(package_root), platform, package_name
 
 
@@ -60,6 +60,7 @@ def publish_local_cdn(
     project_root,
     config_path,
     cdn_root_directory=None,
+    build_output_root=None,
     platform=None,
     package_name=None,
     clean_destination=None,
@@ -67,13 +68,14 @@ def publish_local_cdn(
     config = load_config(config_path)
 
     cdn_root = resolve_project_path(project_root, config_value(config, "CdnRootDirectory", cdn_root_directory, "LocalCdn"))
+    build_output_root = config_value(config, "BuildOutputRoot", build_output_root, "Bundles")
     platform = str(config_value(config, "Platform", platform, "Android")).strip() or "Android"
     package_name = str(config_value(config, "PackageName", package_name, "DefaultPackage")).strip() or "DefaultPackage"
 
     if clean_destination is None:
         clean_destination = config_bool(config, "CleanDestination", False)
 
-    source, platform, package_name = resolve_package_source(project_root, platform, package_name)
+    source, platform, package_name = resolve_package_source(project_root, build_output_root, platform, package_name)
 
     destination = (cdn_root / platform / package_name).resolve()
     ensure_child_path(cdn_root, destination)
@@ -167,6 +169,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Publish latest YooAsset package directory to a local CDN root.")
     parser.add_argument("--config-path", default=None)
     parser.add_argument("--cdn-root-directory", default=None)
+    parser.add_argument("--build-output-root", default=None)
     parser.add_argument("--platform", default=None)
     parser.add_argument("--package-name", default=None)
     parser.add_argument("--clean-destination", action="store_true", default=None)
@@ -223,6 +226,7 @@ def main(args):
         project_root=project_root,
         config_path=config_path,
         cdn_root_directory=args.cdn_root_directory,
+        build_output_root=args.build_output_root,
         platform=args.platform,
         package_name=args.package_name,
         clean_destination=clean_destination,
