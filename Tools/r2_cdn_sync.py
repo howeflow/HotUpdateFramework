@@ -104,6 +104,10 @@ def format_bytes(size):
     return f"{size} B"
 
 
+def log_step(message):
+    print(f"[R2 Sync] {message}", flush=True)
+
+
 def ensure_child_path(root, child):
     root_text = os.path.normcase(os.path.abspath(root))
     child_text = os.path.normcase(os.path.abspath(child))
@@ -139,8 +143,8 @@ def resolve_package_source(project_root, build_output_root, platform, package_na
     return find_latest_package_directory(package_root), platform, package_name
 
 
-def publish_local_cdn(project_root, publish_config_path, cdn_root_override=None):
-    config = load_config(publish_config_path)
+def publish_local_cdn(project_root, local_cdn_config_path, cdn_root_override=None):
+    config = load_config(local_cdn_config_path)
     cdn_root = resolve_project_path(project_root, cdn_root_override or config_value(config, "CdnRootDirectory", default="LocalCdn"))
     build_output_root = config_value(config, "BuildOutputRoot", default="Bundles")
     platform = str(config_value(config, "Platform", default="Android")).strip() or "Android"
@@ -211,6 +215,7 @@ def ensure_r2_credentials(interactive):
 
 
 def create_s3_client(endpoint_url, aws_profile, interactive_credentials):
+    log_step("Loading boto3...")
     boto3, config_type = import_boto3()
     if not aws_profile:
         ensure_r2_credentials(interactive_credentials)
@@ -219,13 +224,16 @@ def create_s3_client(endpoint_url, aws_profile, interactive_credentials):
     if aws_profile:
         session_kwargs["profile_name"] = aws_profile
 
+    log_step(f"Creating R2 client: {endpoint_url}")
     session = boto3.Session(**session_kwargs)
-    return session.client(
+    client = session.client(
         "s3",
         endpoint_url=endpoint_url,
         region_name="auto",
         config=config_type(signature_version="s3v4"),
     )
+    log_step("R2 client created.")
+    return client
 
 
 def content_type_for(path):
@@ -481,10 +489,10 @@ def parse_args():
     parser.add_argument("--aws-profile", default=None)
     parser.add_argument("--delete-remote", action="store_true", default=None)
     parser.add_argument("--keep-remote", action="store_true", default=None)
-    parser.add_argument("--publish-local-first", action="store_true", default=None)
-    parser.add_argument("--skip-local-publish", action="store_true", default=None)
-    parser.add_argument("--publish-config-path", default=None)
-    parser.add_argument("--public-root", default=None)
+    parser.add_argument("--refresh-local-cdn", action="store_true", default=None)
+    parser.add_argument("--skip-local-cdn-refresh", action="store_true", default=None)
+    parser.add_argument("--local-cdn-config-path", default=None)
+    parser.add_argument("--public-base-url", default=None)
     parser.add_argument("--dry-run", action="store_true", default=None)
     parser.add_argument("--incremental-upload", action="store_true", default=None)
     parser.add_argument("--upload-all", action="store_true", default=None)
@@ -531,10 +539,9 @@ def main(args):
     cdn_root_directory = config_value(config, "CdnRootDirectory", args.cdn_root_directory, "LocalCdn")
     bucket_name = str(config_value(config, "BucketName", args.bucket_name, "")).strip()
     account_id = str(config_value(config, "AccountId", args.account_id, "")).strip()
-    prefix = select_prefix(config, args.prefix)
     aws_profile = str(config_value(config, "AwsProfile", args.aws_profile, "")).strip()
-    publish_config_path = config_value(config, "PublishConfigPath", args.publish_config_path, "Tools/local_cdn_server.env")
-    public_root = str(config_value(config, "PublicRoot", args.public_root, "")).strip()
+    local_cdn_config_path = config_value(config, "LocalCdnConfigPath", args.local_cdn_config_path, "Tools/local_cdn_server.env")
+    public_base_url = str(config_value(config, "PublicBaseUrl", args.public_base_url, "")).strip()
     version_test_path = ""
     sync_manifest_file_name = str(config_value(config, "SyncManifestFileName", args.sync_manifest_file_name, ".r2-sync-manifest.json")).strip().replace("\\", "/").strip("/")
 
@@ -544,11 +551,11 @@ def main(args):
     if args.keep_remote:
         delete_remote = False
 
-    publish_local_first = config_bool(config, "PublishLocalFirst", True)
-    if args.publish_local_first:
-        publish_local_first = True
-    if args.skip_local_publish:
-        publish_local_first = False
+    refresh_local_cdn = config_bool(config, "RefreshLocalCdn", True)
+    if args.refresh_local_cdn:
+        refresh_local_cdn = True
+    if args.skip_local_cdn_refresh:
+        refresh_local_cdn = False
 
     dry_run = config_bool(config, "DryRun", False)
     if args.dry_run:
@@ -572,16 +579,16 @@ def main(args):
     if is_placeholder(account_id):
         raise RuntimeError(f"R2 account id is empty. Edit {config_path} or pass --account-id.")
 
+    cdn_root = resolve_project_path(project_root, cdn_root_directory)
     endpoint_url = f"https://{account_id}.r2.cloudflarestorage.com"
 
-    s3 = create_s3_client(endpoint_url, aws_profile, interactive_credentials)
-    cdn_root = resolve_project_path(project_root, cdn_root_directory)
-
-    if publish_local_first:
-        publish_config_full_path = resolve_project_path(project_root, publish_config_path)
-        print("Publish local CDN first:")
-        print(f"  Config: {publish_config_full_path}")
-        publish_local_cdn(project_root, publish_config_full_path, cdn_root)
+    if refresh_local_cdn:
+        local_cdn_config_full_path = resolve_project_path(project_root, local_cdn_config_path)
+        print("Refresh local CDN:")
+        print(f"  Config: {local_cdn_config_full_path}")
+        log_step("Refreshing local CDN...")
+        publish_local_cdn(project_root, local_cdn_config_full_path, cdn_root)
+        log_step("Local CDN refreshed.")
         print()
 
     if not cdn_root.exists():
@@ -590,39 +597,65 @@ def main(args):
     if not version_test_path:
         version_test_path = find_version_test_path(cdn_root)
 
+    log_step(f"Scanning local files: {cdn_root}")
     local_files = collect_local_files(cdn_root)
-    local_keys = {build_s3_key(prefix, relative_path) for _, relative_path in local_files}
-    manifest_key = build_s3_key(prefix, sync_manifest_file_name) if incremental_upload and sync_manifest_file_name else ""
-    if manifest_key:
-        local_keys.add(manifest_key)
+    local_total_bytes = sum(path.stat().st_size for path, _ in local_files)
+    log_step(f"Local files scanned: {len(local_files)} files, {format_bytes(local_total_bytes)}")
 
     print("Sync CDN root to Cloudflare R2:")
     print(f"  Source:   {cdn_root}")
-    print(f"  Target:   s3://{bucket_name}/{prefix}" if prefix else f"  Target:   s3://{bucket_name}")
+    print(f"  Bucket:   {bucket_name}")
     print(f"  Endpoint: {endpoint_url}")
     print(f"  Delete:   {delete_remote}")
     print(f"  DryRun:   {dry_run}")
     print(f"  Incremental upload: {incremental_upload}")
-    if manifest_key:
-        print(f"  Sync manifest: s3://{bucket_name}/{manifest_key}")
     if aws_profile:
         print(f"  Profile:  {aws_profile}")
     print()
 
-    remote_objects = {}
-    if incremental_upload or delete_remote:
-        remote_objects = list_remote_objects(s3, bucket_name, prefix)
+    prefix = select_prefix(config, args.prefix)
+    print(f"Selected target: s3://{bucket_name}/{prefix}" if prefix else f"Selected target: s3://{bucket_name}")
+    print()
 
-    local_manifest = build_local_manifest(local_files) if incremental_upload else None
-    remote_manifest = read_remote_manifest(s3, bucket_name, manifest_key) if manifest_key else None
+    if not aws_profile:
+        ensure_r2_credentials(interactive_credentials)
+        print()
+
+    local_keys = {build_s3_key(prefix, relative_path) for _, relative_path in local_files}
+    manifest_key = build_s3_key(prefix, sync_manifest_file_name) if incremental_upload and sync_manifest_file_name else ""
+    if manifest_key:
+        local_keys.add(manifest_key)
+        print(f"Sync manifest: s3://{bucket_name}/{manifest_key}")
+        print()
+
+    if incremental_upload:
+        log_step("Building local MD5 manifest...")
+        local_manifest = build_local_manifest(local_files)
+        log_step("Local MD5 manifest built.")
+    else:
+        local_manifest = None
+
+    s3 = create_s3_client(endpoint_url, aws_profile, interactive_credentials)
+
+    if manifest_key:
+        log_step(f"Reading remote sync manifest: s3://{bucket_name}/{manifest_key}")
+        remote_manifest = read_remote_manifest(s3, bucket_name, manifest_key)
+        log_step("Remote sync manifest found." if remote_manifest else "Remote sync manifest not found.")
+    else:
+        remote_manifest = None
+
+    remote_objects = {}
+    need_remote_objects = delete_remote or (incremental_upload and remote_manifest is None)
+    if need_remote_objects:
+        log_step(f"Listing remote objects: s3://{bucket_name}/{prefix}" if prefix else f"Listing remote objects: s3://{bucket_name}")
+        remote_objects = list_remote_objects(s3, bucket_name, prefix)
+        log_step(f"Remote objects listed: {len(remote_objects)}")
+
     if incremental_upload:
         print(f"Incremental compare source: {'remote sync manifest' if remote_manifest else 'remote object list'}")
 
     deleted_count = 0
-    if delete_remote:
-        remote_keys = set(remote_objects.keys())
-        deleted_count = delete_remote_keys(s3, bucket_name, remote_keys - local_keys, dry_run)
-
+    log_step("Comparing local and remote files...")
     files_to_upload, skipped_count, skipped_bytes, upload_bytes, compare_source = select_upload_files(
         local_files,
         local_manifest,
@@ -631,12 +664,27 @@ def main(args):
         prefix,
         incremental_upload,
     )
+    log_step(f"Compare completed: upload {len(files_to_upload)} files, skip {skipped_count} files.")
 
+    if files_to_upload:
+        log_step(f"Uploading files: {len(files_to_upload)} files, {format_bytes(upload_bytes)}")
+    else:
+        log_step("No file uploads needed.")
     uploaded_count, uploaded_bytes = upload_files(s3, bucket_name, prefix, files_to_upload, dry_run)
+    log_step("File upload stage completed.")
+
     if incremental_upload:
+        log_step("Uploading sync manifest...")
         manifest_bytes, manifest_status = upload_manifest(s3, bucket_name, manifest_key, local_manifest, remote_manifest, dry_run)
+        log_step(f"Sync manifest stage completed: {manifest_status}")
     else:
         manifest_bytes, manifest_status = 0, "disabled"
+
+    if delete_remote:
+        remote_keys = set(remote_objects.keys())
+        log_step("Deleting stale remote files...")
+        deleted_count = delete_remote_keys(s3, bucket_name, remote_keys - local_keys, dry_run)
+        log_step(f"Stale remote files deleted: {deleted_count}")
 
     print()
     print("R2 sync completed.")
@@ -649,9 +697,9 @@ def main(args):
     elif manifest_bytes:
         print(f"  Manifest:    {format_bytes(manifest_bytes)}")
 
-    if public_root and "pub-xxxx" not in public_root and version_test_path:
+    if public_base_url and "pub-xxxx" not in public_base_url and version_test_path:
         print("  Version test URL:")
-        print(f"  {join_url(public_root, prefix, version_test_path)}")
+        print(f"  {join_url(public_base_url, prefix, version_test_path)}")
 
 
 if __name__ == "__main__":

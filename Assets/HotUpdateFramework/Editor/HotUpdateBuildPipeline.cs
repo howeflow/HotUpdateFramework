@@ -219,7 +219,7 @@ namespace HotUpdateFramework.Editor
             HotUpdateConfig config = HotUpdateEditorUtility.GetOrCreateConfig();
 
             string packageVersion = string.IsNullOrWhiteSpace(config.PackageVersionOverride)
-                ? DateTime.Now.ToString("yyyyMMddHHmmss")
+                ? DateTime.Now.ToString("yyyyMMddHHmm")
                 : config.PackageVersionOverride;
             EBuildinFileCopyOption buildinFileCopyOption = config.UseBuildinFileSystemInHostMode
                 ? EBuildinFileCopyOption.ClearAndCopyAll

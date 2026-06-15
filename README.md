@@ -314,9 +314,9 @@ BucketName=your-r2-bucket
 AccountId=your-cloudflare-account-id
 Prefixes=dev,release
 DeleteRemote=false
-PublishLocalFirst=true
-PublishConfigPath=Tools/local_cdn_server.env
-PublicRoot=https://pub-xxxx.r2.dev
+RefreshLocalCdn=true
+LocalCdnConfigPath=Tools/local_cdn_server.env
+PublicBaseUrl=https://pub-xxxx.r2.dev
 DryRun=false
 IncrementalUpload=true
 SyncManifestFileName=.r2-sync-manifest.json
@@ -343,7 +343,7 @@ Prefix [1-2, default 1]:
 
 ```powershell
 python .\Tools\r2_cdn_sync.py --prefix release
-```[local_cdn_server.env](Tools/local_cdn_server.env)
+```
 
 也可以提前在终端设置环境变量，脚本检测到后不会再次询问：
 
