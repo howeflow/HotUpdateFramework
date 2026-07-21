@@ -12,30 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7d3c35a7d7f345d5a93a4a6ce72018f2, type: 3}
   m_Name: HotUpdateConfig
   m_EditorClassIdentifier: 
-  enableRuntimeLog: 1
+  platformNameOverride: 
+  remoteUrlTemplate: '{Root}/{Platform}/{PackageName}/{FileName}'
+  remoteRoots:
+  - http://127.0.0.1:8080
+  - https://your-cdn-domain.example.com/hotupdate/release
+  - https://your-cdn-domain.example.com/hotupdate/dev
   packageName: DefaultPackage
   playMode: 2
   useBuildinFileSystemInHostMode: 0
   packageVersionOverride: 
   manifestTimeout: 10
-  remoteRoots:
-  - http://127.0.0.1:8080
-  - https://your-cdn-domain.example.com/hotupdate/dev
-  - https://your-cdn-domain.example.com/hotupdate/release
-  remoteUrlTemplate: '{Root}/{Platform}/{PackageName}/{FileName}'
-  platformNameOverride: 
   downloadingMaxNumber: 8
   failedTryAgain: 3
-  homologousImageMode: 1
-  aotMetadataAssetDirectory: Assets/HotUpdateAssets/Assemblies/AOT
-  aotMetadataAssemblyNames:
-  - UniTask.dll
-  - UnityEngine.CoreModule.dll
-  - YooAsset.dll
-  - mscorlib.dll
-  hotUpdateAssemblyAssetDirectory: Assets/HotUpdateAssets/Assemblies
-  hotUpdateAssemblyNames:
-  - HotUpdate.dll
-  invokeHotUpdateEntry: 1
-  entryTypeName: HotUpdate.HotUpdateEntry
-  entryMethodName: Start

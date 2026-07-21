@@ -1,12 +1,11 @@
 {
-    "name": "HotUpdateFramework.Editor",
-    "rootNamespace": "HotUpdateFramework.Editor",
+    "name": "HotUpdateFramework.Code.Editor",
+    "rootNamespace": "HotUpdateFramework.Code.Editor",
     "references": [
-        "HotUpdateFramework.Runtime",
-        "YooAsset",
-        "YooAsset.Editor",
+        "HotUpdateFramework.Editor",
         "HybridCLR.Editor",
-        "Unity.ScriptableBuildPipeline.Editor"
+        "HotUpdateFramework",
+        "HotUpdateFramework.Code"
     ],
     "includePlatforms": [
         "Editor"

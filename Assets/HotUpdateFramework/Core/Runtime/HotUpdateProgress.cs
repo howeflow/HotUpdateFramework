@@ -10,14 +10,7 @@ namespace HotUpdateFramework
         public readonly long CurrentDownloadBytes;
         public readonly long TotalDownloadBytes;
 
-        public HotUpdateProgress(
-            HotUpdateStage stage,
-            string message,
-            float progress = 0f,
-            int currentDownloadCount = 0,
-            int totalDownloadCount = 0,
-            long currentDownloadBytes = 0L,
-            long totalDownloadBytes = 0L)
+        public HotUpdateProgress(HotUpdateStage stage, string message, float progress = 0f, int currentDownloadCount = 0, int totalDownloadCount = 0, long currentDownloadBytes = 0L, long totalDownloadBytes = 0L)
         {
             Stage = stage;
             Message = message ?? string.Empty;

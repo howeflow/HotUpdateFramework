@@ -1,5 +1,6 @@
 using Cysharp.Threading.Tasks;
 using HotUpdateFramework;
+using HotUpdateFramework.Code;
 using UnityEngine;
 using UnityEngine.UI;
 

@@ -1,5 +1,6 @@
 using Cysharp.Threading.Tasks;
 using HotUpdateFramework;
+using HotUpdateFramework.Code;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,7 +15,6 @@ public class BootController : MonoBehaviour
     {
         HotUpdateOffsetCrypto.Register();
 
-        var config = HotUpdateConfig.LoadDefault();
         var progress = Progress.Create<HotUpdateProgress>(OnHotUpdateProgress);
         var context = new HotUpdateContext
         {
@@ -23,7 +23,7 @@ public class BootController : MonoBehaviour
             UserData = this
         };
 
-        HotUpdateService.Instance.RunAsync(config, progress, context, this.GetCancellationTokenOnDestroy()).Forget();
+        HotUpdateCodeService.Instance.RunAsync(progress, context, this.GetCancellationTokenOnDestroy()).Forget();
     }
 
     private void OnHotUpdateProgress(HotUpdateProgress value)

@@ -36,11 +36,7 @@ namespace HotUpdateFramework
 
         private string BuildUrl(string root, string fileName)
         {
-            string url = _config.RemoteUrlTemplate
-                .Replace("{Root}", (root ?? string.Empty).TrimEnd('/'))
-                .Replace("{Platform}", _platformName)
-                .Replace("{PackageName}", _packageName)
-                .Replace("{FileName}", fileName ?? string.Empty);
+            string url = _config.RemoteUrlTemplate.Replace("{Root}", (root ?? string.Empty).TrimEnd('/')).Replace("{Platform}", _platformName).Replace("{PackageName}", _packageName).Replace("{FileName}", fileName ?? string.Empty);
 
             return HotUpdateUtility.RemoveDuplicateSlashesAfterScheme(url);
         }

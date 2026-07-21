@@ -1,10 +1,11 @@
 {
-    "name": "HotUpdateFramework.Runtime",
-    "rootNamespace": "HotUpdateFramework",
+    "name": "HotUpdateFramework.Code",
+    "rootNamespace": "HotUpdateFramework.Code",
     "references": [
         "YooAsset",
         "UniTask",
-        "HybridCLR.Runtime"
+        "HybridCLR.Runtime",
+        "HotUpdateFramework"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -12,7 +12,7 @@ namespace HotUpdateFramework.Editor
 
         public static HotUpdateConfig CreateDefaultConfigAsset()
         {
-            HotUpdateConfig existing = AssetDatabase.LoadAssetAtPath<HotUpdateConfig>(DefaultConfigAssetPath);
+            var existing = AssetDatabase.LoadAssetAtPath<HotUpdateConfig>(DefaultConfigAssetPath);
             if (existing != null)
             {
                 Selection.activeObject = existing;
@@ -25,7 +25,7 @@ namespace HotUpdateFramework.Editor
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Selection.activeObject = config;
-            HotUpdateLogger.LogAlways($"Created config: {DefaultConfigAssetPath}");
+            HotUpdateLogger.Log($"Created config: {DefaultConfigAssetPath}");
             return config;
         }
 
@@ -55,7 +55,7 @@ namespace HotUpdateFramework.Editor
             string destinationFullPath = GetProjectFullPath(destinationAssetPath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFullPath));
             File.Copy(sourcePath, destinationFullPath, true);
-            HotUpdateLogger.LogAlways($"Copy {sourcePath} -> {destinationAssetPath}");
+            HotUpdateLogger.Log($"Copy {sourcePath} -> {destinationAssetPath}");
             return true;
         }
 
@@ -80,9 +80,7 @@ namespace HotUpdateFramework.Editor
             string fullPath = Path.GetFullPath(path);
             string fullPathWithSeparator = EnsureTrailingSeparator(fullPath);
 
-            var comparison = Application.platform == RuntimePlatform.WindowsEditor
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
+            var comparison = Application.platform == RuntimePlatform.WindowsEditor ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
             if (fullPathWithSeparator.StartsWith(projectRoot, comparison) == false)
                 throw new InvalidOperationException($"Can not access directory outside project: {fullPath}");
@@ -93,7 +91,7 @@ namespace HotUpdateFramework.Editor
                 throw new InvalidOperationException("Can not access project root.");
         }
 
-        private static void EnsureDirectory(string assetPath)
+        public static void EnsureDirectory(string assetPath)
         {
             if (string.IsNullOrWhiteSpace(assetPath))
                 return;
@@ -111,8 +109,7 @@ namespace HotUpdateFramework.Editor
 
         private static string EnsureTrailingSeparator(string path)
         {
-            if (path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
-                path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+            if (path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) || path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
                 return path;
 
             return path + Path.DirectorySeparatorChar;

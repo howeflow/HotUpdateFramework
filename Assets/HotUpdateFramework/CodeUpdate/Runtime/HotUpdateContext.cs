@@ -1,10 +1,12 @@
 using System;
 using UnityEngine;
 
-namespace HotUpdateFramework
+namespace HotUpdateFramework.Code
 {
     public sealed class HotUpdateContext
     {
+        private bool _completed;
+
         public Action OnComplete { get; set; }
         public Action<float, string> OnProgress { get; set; }
         public object UserData { get; set; }
@@ -16,6 +18,10 @@ namespace HotUpdateFramework
 
         public void Complete()
         {
+            if (_completed)
+                return;
+
+            _completed = true;
             OnComplete?.Invoke();
         }
     }

@@ -2,6 +2,13 @@
 
 这个项目在 `Assets/HotUpdateFramework` 下提供了一套轻量热更新框架，用来串联 HybridCLR、YooAsset 和 UniTask，并支持任意 HTTP/HTTPS CDN。CDN 可以是对象存储、云厂商 CDN、自建静态服务器、Nginx、OSS/COS/S3 兼容源站等，只要 YooAsset 生成的文件能通过 URL 访问即可。
 
+框架代码分为两个独立程序集模块：
+
+- `Core`：负责配置、YooAsset 初始化、版本清单和资源下载，不引用 HybridCLR。
+- `HybridCLR`：直接负责 AOT 元数据、热更 DLL、`HotUpdateContext` 和入口调用；编辑器生成与复制菜单也位于独立 Editor 程序集，不使用接口或运行时注册。
+
+配置资源也按模块拆分：`HotUpdateConfig.asset` 只保存 YooAsset、CDN 和下载配置；`HotUpdateCodeConfig.asset` 保存 HybridCLR 元数据、热更程序集和入口配置。移除 HybridCLR 模块时不会影响 Core 配置。
+
 ## 单包结构
 
 框架采用单 YooAsset 包结构：
@@ -17,7 +24,7 @@
 5. 将 `DefaultPackage` 设置为默认资源包。
 6. 反射调用 `HotUpdate.HotUpdateEntry.Start`。
 
-运行时框架普通日志由 `HotUpdateConfig.asset` 里的 `enableRuntimeLog` 控制，默认开启。关闭后只隐藏热更阶段类的普通日志，下载失败和热更失败仍然会输出错误日志。
+运行时日志通过 `HotUpdateLogger.Logger` 控制，默认使用 `DefaultUpdateLogger`。如果不需要框架日志，可以设置为 `EmptyHotUpdateLogger` 或提供自己的 `IHotUpdateLogger` 实现。
 
 自定义加解密时，直接实现 YooAsset 官方接口，并在构建热更包前和运行热更前注册到 `HotUpdateCryptoProvider`：
 
@@ -49,7 +56,7 @@ public static class MyBundleCryptoRegister
 }
 ```
 
-运行时解密服务必须在调用 `HotUpdateService.Instance.RunAsync` 之前注册。编辑器加密服务可以放在 Editor 代码里，用 `[InitializeOnLoadMethod]` 注册。构建热更包和运行时加载必须使用同一套算法和参数，否则 AssetBundle 会加载失败。
+运行时解密服务必须在调用 `HotUpdateCodeService.Instance.RunAsync` 之前注册。编辑器加密服务可以放在 Editor 代码里，用 `[InitializeOnLoadMethod]` 注册。构建热更包和运行时加载必须使用同一套算法和参数，否则 AssetBundle 会加载失败。
 
 如果自定义算法只是给 AssetBundle 文件头部增加固定偏移，解密服务里可以直接使用 `AssetBundle.LoadFromFile(fileInfo.FileLoadPath, fileInfo.FileLoadCRC, offset)`，运行时会走更省内存的文件偏移加载。AES、异或、压缩包头等需要还原完整字节的算法，可以在解密服务里读取文件、解密后再从 `AssetBundle.LoadFromMemory` 或 `AssetBundle.LoadFromMemoryAsync` 加载。
 
@@ -58,7 +65,9 @@ public static class MyBundleCryptoRegister
 建议在 BootScene 里完成隐私协议、基础 SDK、网络检查、强更检查之后，再手动调用：
 
 ```csharp
-HotUpdateConfig config = HotUpdateConfig.LoadDefault();
+using HotUpdateFramework;
+using HotUpdateFramework.Code;
+
 var progress = Progress.Create<HotUpdateProgress>(value =>
 {
     //进度处理
@@ -72,8 +81,13 @@ var context = new HotUpdateContext
 };
 
 var cancellationToken = this.GetCancellationTokenOnDestroy();
-await HotUpdateService.Instance.RunAsync(config, progress, context, cancellationToken);
+await HotUpdateCodeService.Instance.RunAsync(
+    progress,
+    context,
+    cancellationToken);
 ```
+
+不使用代码热更模块时，Core 不需要 `HotUpdateContext`，直接调用 `await HotUpdateService.Instance.RunAsync(progress, cancellationToken)` 即可。
 
 `HotUpdateProgress.Progress` 表示当前阶段进度。Loading 进度条如果需要完整 `0-1` 流程进度，建议在启动层根据 `HotUpdateProgress.Stage` 自己做映射，示例可参考 `Assets/Sample/BootController.cs`。
 
@@ -95,13 +109,14 @@ public static async UniTask Start(HotUpdateContext context)
 - AOT 元数据 DLL：`Assets/HotUpdateAssets/Assemblies/AOT/*.dll.bytes`
 - 普通热更新资源：`Assets/HotUpdateAssets/Res`
 - 热更新配置：`Assets/Resources/HotUpdateConfig.asset`
+- 代码热更配置：`Assets/Resources/HotUpdateCodeConfig.asset`
 
-`HotUpdateConfig.asset` 里的程序集目录配置：
+`HotUpdateCodeConfig.asset` 里的程序集目录配置：
 
 - `hotUpdateAssemblyAssetDirectory`：热更 DLL 的目标目录，默认是 `Assets/HotUpdateAssets/Assemblies`
 - `aotMetadataAssetDirectory`：AOT 元数据 DLL 的目标目录，默认是 `Assets/HotUpdateAssets/Assemblies/AOT`
 
-目录需要位于 `Assets` 下。程序集列表可以填写 `HotUpdate`、`HotUpdate.dll` 或 `HotUpdate.dll.bytes`，框架会转换为 YooAsset 使用的 `.dll.bytes` 资源路径。调整目录或程序集列表后，执行 `Hot Update/Prepare HotUpdate Process` 和 `Hot Update/Build YooAsset Package`。
+目录需要位于 `Assets` 下。程序集列表可以填写 `HotUpdate`、`HotUpdate.dll` 或 `HotUpdate.dll.bytes`，框架会转换为 YooAsset 使用的 `.dll.bytes` 资源路径。调整目录或程序集列表后，执行 `Hot Update/Prepare HotUpdate Process` 和 `Hot Update/Asset/Build YooAsset Package`。
 
 YooAsset Collector 默认配置：
 
@@ -112,7 +127,7 @@ YooAsset Collector 默认配置：
 `ProjectSettings/HybridCLRSettings.asset` 配置内容：
 
 - 热更程序集：`HotUpdate`
-- AOT 元数据程序集：执行 `Hot Update/Prepare All Process` 后，会从 `Assets/HybridCLRGenerate/AOTGenericReferences.cs` 自动同步到 `ProjectSettings/HybridCLRSettings.asset` 和 `HotUpdateConfig.asset`
+- AOT 元数据程序集：执行 `Hot Update/Prepare All Process` 后，会从 `Assets/HybridCLRGenerate/AOTGenericReferences.cs` 自动同步到 `ProjectSettings/HybridCLRSettings.asset` 和 `HotUpdateCodeConfig.asset`
 
 ## 编辑器流程
 
@@ -121,7 +136,7 @@ YooAsset Collector 默认配置：
 3. 首次出包、AOT 代码变化、切平台或 `Development Build` 开关变化时，执行 `Hot Update/Prepare All Process`。
 4. 只修改热更代码时，执行 `Hot Update/Prepare HotUpdate Process`。
 5. 如果首包需要内置一份热更资源，勾选 `HotUpdateConfig.asset` 里的 `useBuildinFileSystemInHostMode`。
-6. 执行 `Hot Update/Build YooAsset Package`，构建单个热更新包。
+6. 执行 `Hot Update/Asset/Build YooAsset Package`，构建单个热更新包。
 7. 开启内置文件时，重新构建 App 包，让 `Assets/StreamingAssets/DefaultPackage` 进入首包。
 8. 将生成的 YooAsset 包目录发布到 CDN 源站。
 
@@ -133,7 +148,7 @@ YooAsset Collector 默认配置：
 
 ```text
 Hot Update/Prepare All Process
-Hot Update/Build YooAsset Package
+Hot Update/Asset/Build YooAsset Package
 Build Player
 ```
 
@@ -148,7 +163,7 @@ Build Player
 改了 `useBuildinFileSystemInHostMode` / 加解密服务代码：
 
 ```text
-Hot Update/Build YooAsset Package
+Hot Update/Build Package
 Build Player
 ```
 
@@ -156,7 +171,7 @@ Build Player
 
 ```text
 Hot Update/Prepare HotUpdate Process
-Hot Update/Build YooAsset Package
+Hot Update/Build Package
 ```
 
 `Prepare HotUpdate Process` 只编译热更 DLL，并复制热更 DLL 和已有的 AOT 元数据 DLL。它不会重新生成 AOT 元数据列表。
@@ -166,7 +181,7 @@ Hot Update/Build YooAsset Package
 改了 `Assets/HotUpdateAssets/Res` 下的热更资源：
 
 ```text
-Hot Update/Build YooAsset Package
+Hot Update/Build Package
 ```
 
 
@@ -382,7 +397,7 @@ remoteRoots[1] = https://pub-xxxx.r2.dev/dev
 ## 注意事项
 
 - 真机联机更新建议使用 `HostPlayMode`，并确保源站目录结构和 URL 模板一致。
-- 项目按强联网流程处理热更。没有网络或源站不可用时，版本和清单请求会按 `manifestTimeout` 超时失败，启动层应显示重试、退出或检查网络，不走离线缓存进游戏。
-- `useBuildinFileSystemInHostMode` 只有在重新执行 `Hot Update/Build YooAsset Package` 并重新打 App 包后才对真机首包生效；只在运行时勾选但没有生成 `StreamingAssets/DefaultPackage`，会导致内置 catalog 或清单缺失。
+- `HostPlayMode` 开启 `useBuildinFileSystemInHostMode` 后，远端地址为空或版本/清单请求失败时会切换到首包内置资源。没有构建内置资源时仍会报告网络或清单错误。
+- `useBuildinFileSystemInHostMode` 只有在重新执行 `Hot Update/Asset/Build YooAsset Package` 并重新打 App 包后才对真机首包生效；只在运行时勾选但没有生成 `StreamingAssets/DefaultPackage`，会导致内置 catalog 或清单缺失。
 - 资源加密由 `HotUpdateCryptoProvider` 注册 YooAsset `IEncryptionServices` 和 `IDecryptionServices` 决定。
 - Editor 模拟模式依赖 `AssetBundleCollectorSetting.asset` 里存在 `DefaultPackage`。

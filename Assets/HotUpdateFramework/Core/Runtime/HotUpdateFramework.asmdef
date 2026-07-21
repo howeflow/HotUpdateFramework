@@ -1,11 +1,9 @@
 {
-    "name": "HotUpdate",
-    "rootNamespace": "HotUpdate",
+    "name": "HotUpdateFramework",
+    "rootNamespace": "HotUpdateFramework",
     "references": [
-        "GUID:e34a5702dd353724aa315fb8011f08c3",
-        "GUID:f51ebe6a0ceec4240a699833d6309b23",
-        "GUID:e884ac7576882ba4fbb9a8bd4092629e",
-        "GUID:c86c03ecc5e947c4b0d7da427b2b11e2"
+        "YooAsset",
+        "UniTask"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
