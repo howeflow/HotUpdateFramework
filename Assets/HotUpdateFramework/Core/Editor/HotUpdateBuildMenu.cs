@@ -15,7 +15,7 @@ namespace HotUpdateFramework.Editor
         [MenuItem(MenuRoot + "Build Package", priority = 201)]
         public static void BuildYooAssetPackage()
         {
-            HotUpdateBuildPipeline.BuildPackage();
+            HotUpdateBuildPipeline.BuildPackage(EditorUserBuildSettings.activeBuildTarget);
         }
 
         [MenuItem(MenuRoot + "Clear/Build Cache", priority = 202)]

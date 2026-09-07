@@ -27,11 +27,24 @@ MonoBehaviour:
     Groups:
     - GroupName: HotUpdate
       GroupDesc: HybridCLR DLL, AOT metadata and game resources
-      AssetTags: 
+      AssetTags: builtin;download
       ActiveRuleName: EnableGroup
       Collectors:
-      - CollectPath: Assets/HotUpdateAssets
-        CollectorGUID: cdd421a05f282b74c9a7fefe51acbbca
+      - CollectPath: Assets/HotUpdateAssets/Assemblies
+        CollectorGUID: 5f12be8a63c060149991d004ae0824a9
+        CollectorType: 0
+        AddressRuleName: AddressByFileName
+        PackRuleName: PackDirectory
+        FilterRuleName: CollectAll
+        AssetTags: 
+        UserData: 
+    - GroupName: Default Group
+      GroupDesc: 
+      AssetTags: builtin;download
+      ActiveRuleName: EnableGroup
+      Collectors:
+      - CollectPath: Assets/HotUpdateAssets/Res
+        CollectorGUID: 5574aaf7eecd2084ebb6a200a9d1f637
         CollectorType: 0
         AddressRuleName: AddressByFileName
         PackRuleName: PackDirectory

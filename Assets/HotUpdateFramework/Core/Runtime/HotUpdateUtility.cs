@@ -11,11 +11,8 @@ namespace HotUpdateFramework
 {
     public static class HotUpdateUtility
     {
-        public static string GetPlatformName(string overrideName)
+        public static string GetPlatformName()
         {
-            if (string.IsNullOrWhiteSpace(overrideName) == false)
-                return overrideName.Trim();
-
 #if UNITY_EDITOR
             return EditorUserBuildSettings.activeBuildTarget.ToString();
 #else
@@ -140,26 +137,6 @@ namespace HotUpdateFramework
                 return assemblyName.Substring(0, assemblyName.Length - ".dll".Length);
 
             return assemblyName;
-        }
-
-        public static string GetRemoteRootByPriority(IReadOnlyList<string> remoteRoots, int priorityIndex)
-        {
-            if (remoteRoots == null || priorityIndex < 0)
-                return string.Empty;
-
-            int validIndex = 0;
-            foreach (string remoteRoot in remoteRoots)
-            {
-                if (string.IsNullOrWhiteSpace(remoteRoot))
-                    continue;
-
-                if (validIndex == priorityIndex)
-                    return remoteRoot.Trim();
-
-                validIndex++;
-            }
-
-            return string.Empty;
         }
 
         public static string RemoveDuplicateSlashesAfterScheme(string url)

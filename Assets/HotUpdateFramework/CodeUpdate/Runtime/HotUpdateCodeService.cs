@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using HybridCLR;
 using UnityEngine;
 using YooAsset;
 

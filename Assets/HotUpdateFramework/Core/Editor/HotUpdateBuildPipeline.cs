@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using YooAsset;
 using YooAsset.Editor;
@@ -8,12 +10,11 @@ namespace HotUpdateFramework.Editor
 {
     public static class HotUpdateBuildPipeline
     {
-        public static void BuildPackage()
+        public static void BuildPackage(BuildTarget buildTarget)
         {
             HotUpdateConfig config = HotUpdateEditorUtility.GetOrCreateConfig();
 
-            string packageVersion = string.IsNullOrWhiteSpace(config.PackageVersionOverride) ? DateTime.Now.ToString("yyyyMMddHHmm") : config.PackageVersionOverride;
-            EBuildinFileCopyOption buildinFileCopyOption = config.UseBuildinFileSystemInHostMode ? EBuildinFileCopyOption.ClearAndCopyAll : EBuildinFileCopyOption.None;
+            string packageVersion = DateTime.Now.ToString("yyyyMMddHHmm");
             IEncryptionServices encryptionServices = HotUpdateCryptoProvider.EncryptionServices;
 
             ScriptableBuildParameters buildParameters = new ScriptableBuildParameters
@@ -22,7 +23,7 @@ namespace HotUpdateFramework.Editor
                     BuildinFileRoot = AssetBundleBuilderHelper.GetStreamingAssetsRoot(),
                     BuildPipeline = EBuildPipeline.ScriptableBuildPipeline.ToString(),
                     BuildBundleType = (int)EBuildBundleType.AssetBundle,
-                    BuildTarget = EditorUserBuildSettings.activeBuildTarget,
+                    BuildTarget = buildTarget,
                     PackageName = config.PackageName,
                     PackageVersion = packageVersion,
                     PackageNote = "Hot update package",
@@ -30,8 +31,8 @@ namespace HotUpdateFramework.Editor
                     SingleReferencedPackAlone = false,
                     VerifyBuildingResult = true,
                     FileNameStyle = EFileNameStyle.HashName,
-                    BuildinFileCopyOption = buildinFileCopyOption,
-                    BuildinFileCopyParams = string.Empty,
+                    BuildinFileCopyOption = EBuildinFileCopyOption.ClearAndCopyByTags,
+                    BuildinFileCopyParams = GetBuiltinTagParams(config.BuiltinTag),
                     CompressOption = ECompressOption.LZ4,
                     EncryptionServices = encryptionServices,
                     ClearBuildCacheFiles = false,
@@ -39,19 +40,28 @@ namespace HotUpdateFramework.Editor
                     BuiltinShadersBundleName = GetBuiltinShaderBundleName(config.PackageName)
                 };
 
-            HotUpdateLogger.Log($"Buildin file copy option: {buildinFileCopyOption}");
-            HotUpdateLogger.Log($"Bundle encryption: " + $"{(encryptionServices != null ? "Enabled" : "Disabled")}");
+            HotUpdateLogger.Log($"Bundle encryption: " + $"{encryptionServices}");
 
             var pipeline = new ScriptableBuildPipeline();
             BuildResult buildResult = pipeline.Run(buildParameters, true);
             if (buildResult.Success)
             {
-                EditorUtility.RevealInFinder(buildResult.OutputPackageDirectory);
                 HotUpdateLogger.Log($"YooAsset package built: " + $"{buildResult.OutputPackageDirectory}");
                 return;
             }
 
             throw new Exception($"YooAsset build failed: " + $"{buildResult.FailedTask}, {buildResult.ErrorInfo}");
+        }
+        
+        private static string GetBuiltinTagParams(IReadOnlyCollection<string> builtinTags)
+        {
+            if (builtinTags == null || builtinTags.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return builtinTags.Aggregate(string.Empty, (current, item) => current + (item + ";"));
+
         }
 
         public static void ClearBuildCache()

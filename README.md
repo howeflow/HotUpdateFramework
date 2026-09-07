@@ -135,12 +135,16 @@ YooAsset Collector 默认配置：
 2. 在 YooAsset Collector 里配置 `DefaultPackage`，并收集 `Assets/HotUpdateAssets`。
 3. 首次出包、AOT 代码变化、切平台或 `Development Build` 开关变化时，执行 `Hot Update/Prepare All Process`。
 4. 只修改热更代码时，执行 `Hot Update/Prepare HotUpdate Process`。
-5. 如果首包需要内置一份热更资源，勾选 `HotUpdateConfig.asset` 里的 `useBuildinFileSystemInHostMode`。
+5. 在 YooAsset Collector 中给需要进入首包的资源设置标签，并将标签配置到 `HotUpdateConfig.asset` 的 `builtinTag`。
 6. 执行 `Hot Update/Asset/Build YooAsset Package`，构建单个热更新包。
-7. 开启内置文件时，重新构建 App 包，让 `Assets/StreamingAssets/DefaultPackage` 进入首包。
+7. 重新构建 App 包，让按 `builtinTag` 筛选出的 `Assets/StreamingAssets/DefaultPackage` 资源进入首包。
 8. 将生成的 YooAsset 包目录发布到 CDN 源站。
 
-`useBuildinFileSystemInHostMode` 关闭时，`HostPlayMode` 只使用远端 CDN 和本地缓存；开启时，构建菜单会使用 `ClearAndCopyAll` 把本次 YooAsset 构建结果拷到 `Assets/StreamingAssets/DefaultPackage`，运行时会先启用 Buildin 文件系统，再配合 CDN 检查更新。
+`HostPlayMode` 固定同时启用 Buildin 与 Cache 文件系统。构建菜单使用 `ClearAndCopyByTags`，只把 `builtinTag` 匹配的 Bundle 以及包清单复制到 `Assets/StreamingAssets/DefaultPackage`，其余资源从本地缓存或 CDN 获取。
+
+初始化阶段只主动下载 `downloadTag` 配置的资源；列表为空时跳过主动下载，其他资源在实际加载时按需获取。YooAsset 的标签下载规则会同时包含没有配置任何标签的基础 Bundle。
+
+运行时可通过 `HotUpdateService.IsNeedDownload` 判断指定 location 是否缺少主 Bundle 或依赖 Bundle，并使用 `DownloadByLocationAsync`、`DownloadByLocationsAsync` 或 `DownloadByTagsAsync` 主动下载；资源加载和句柄释放仍直接使用 YooAsset API。
 
 ### 步骤操作
 
@@ -160,7 +164,7 @@ Build Player
 Build Player
 ```
 
-改了 `useBuildinFileSystemInHostMode` / 加解密服务代码：
+改了 `builtinTag` / 加解密服务代码：
 
 ```text
 Hot Update/Build Package
@@ -193,21 +197,23 @@ Hot Update/Build Package
 {Root}/{Platform}/{PackageName}/{FileName}
 ```
 
-`HotUpdateConfig.asset` 使用 `remoteRoots` 列表配置远端根地址。列表从上往下表示优先级：
-
-- 第一个非空地址：YooAsset main URL
-- 第二个非空地址：YooAsset fallback URL
-- 第三个及之后：作为备用地址记录，运行时不会被 YooAsset 自动逐个尝试，需要使用时把它拖到列表前面
-
-可以把本地、测试、正式地址都放在列表里，通过调整顺序决定当前包访问哪条 CDN：
+`HotUpdateConfig.asset` 使用 `Environment` 选择 `Local`、`Dev` 或 `Release` 环境。每个环境分别配置 YooAsset 的 `Main Root` 和 `Fallback Root`：
 
 ```text
-http://127.0.0.1:8080
-https://cdn.example.com/hotupdate/dev
-https://cdn.example.com/hotupdate/release
+Environment: Dev
+
+Local Remote
+  Main Root: http://127.0.0.1:8080
+  Fallback Root:
+Dev Remote
+  Main Root: https://cdn.example.com/hotupdate/dev
+  Fallback Root: https://backup.example.com/hotupdate/dev
+Release Remote
+  Main Root: https://cdn.example.com/hotupdate/release
+  Fallback Root: https://backup.example.com/hotupdate/release
 ```
 
-如果 `remoteRoots` 的第一项设置为：
+如果选择 `Dev`，并将 `Dev Remote/Main Root` 设置为：
 
 ```text
 https://cdn.example.com/hotupdate/dev
@@ -273,10 +279,10 @@ LocalServerPort=8080
 python .\Tools\local_cdn_server.py --start-local-server
 ```
 
-此时可以把本地地址放到 `HotUpdateConfig.asset` 的 `remoteRoots` 第一位：
+此时在 `HotUpdateConfig.asset` 中选择 `Local`，并设置：
 
 ```text
-http://127.0.0.1:8080
+Local Remote/Main Root = http://127.0.0.1:8080
 ```
 
 发布到真实源站时，调整配置里的 `CdnRootDirectory`，例如：
@@ -285,10 +291,11 @@ http://127.0.0.1:8080
 CdnRootDirectory=D:/CdnOrigin/hotupdate
 ```
 
-然后把公网地址放到 `remoteRoots` 第一位，例如：
+然后选择对应环境并填写公网地址，例如：
 
 ```text
-https://cdn.example.com/hotupdate/dev
+Environment = Dev
+Dev Remote/Main Root = https://cdn.example.com/hotupdate/dev
 ```
 
 命令行参数可临时覆盖配置：
@@ -383,21 +390,22 @@ python .\Tools\r2_cdn_sync.py --upload-all
 R2 公开访问地址对应填到 `HotUpdateConfig.asset`：
 
 ```text
-remoteRoots[0] = https://pub-xxxx.r2.dev/dev
-remoteRoots[1] = https://pub-xxxx.r2.dev/release
+Dev Remote/Main Root = https://pub-xxxx.r2.dev/dev
+Release Remote/Main Root = https://pub-xxxx.r2.dev/release
 ```
 
-如果发布正式环境，运行脚本时选择 `release` 或传入 `--prefix release`，远端文件路径为 `release/Android/DefaultPackage/...`。要让当前包访问正式环境，把正式地址放到 `remoteRoots` 第一位：
+如果发布正式环境，运行脚本时选择 `release` 或传入 `--prefix release`，远端文件路径为 `release/Android/DefaultPackage/...`。要让当前包访问正式环境，将配置切换为：
 
 ```text
-remoteRoots[0] = https://pub-xxxx.r2.dev/release
-remoteRoots[1] = https://pub-xxxx.r2.dev/dev
+Environment = Release
 ```
+
+`Fallback Root` 应指向同一环境的备用 CDN；留空时会自动使用该环境的 `Main Root`，不要把 `Dev` 和 `Release` 互相作为备用地址。
 
 ## 注意事项
 
 - 真机联机更新建议使用 `HostPlayMode`，并确保源站目录结构和 URL 模板一致。
-- `HostPlayMode` 开启 `useBuildinFileSystemInHostMode` 后，远端地址为空或版本/清单请求失败时会切换到首包内置资源。没有构建内置资源时仍会报告网络或清单错误。
-- `useBuildinFileSystemInHostMode` 只有在重新执行 `Hot Update/Asset/Build YooAsset Package` 并重新打 App 包后才对真机首包生效；只在运行时勾选但没有生成 `StreamingAssets/DefaultPackage`，会导致内置 catalog 或清单缺失。
+- `HostPlayMode` 成功更新远端清单后会立即记录最后可用版本，不要求所有资源下载完成。之后远端版本或清单请求失败时，会依次尝试 YooAsset 本地缓存清单和首包内置资源；使用缓存清单时仍保持 Buildin 与 Cache 文件系统同时生效。
+- 修改 `builtinTag` 后需要重新执行 `Hot Update/Asset/Build YooAsset Package` 并重新打 App 包，才会改变真机首包内置资源。
 - 资源加密由 `HotUpdateCryptoProvider` 注册 YooAsset `IEncryptionServices` 和 `IDecryptionServices` 决定。
 - Editor 模拟模式依赖 `AssetBundleCollectorSetting.asset` 里存在 `DefaultPackage`。

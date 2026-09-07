@@ -4,40 +4,37 @@ namespace HotUpdateFramework
 {
     public sealed class RemoteServices : IRemoteServices
     {
-        private readonly HotUpdateConfig _config;
         private readonly string _packageName;
         private readonly string _platformName;
-        
-        private string remoteMainRoot;
-        private string remoteFallbackRoot;
+        private readonly string _remoteMainRoot;
+        private readonly string _remoteFallbackRoot;
 
         public RemoteServices(HotUpdateConfig config, string packageName)
         {
-            _config = config;
             _packageName = packageName;
-            _platformName = HotUpdateUtility.GetPlatformName(config.PlatformNameOverride);
+            _platformName = HotUpdateUtility.GetPlatformName();
 
-            remoteMainRoot = HotUpdateUtility.GetRemoteRootByPriority(config.RemoteRoots, 0);
-            remoteFallbackRoot = HotUpdateUtility.GetRemoteRootByPriority(config.RemoteRoots, 1);
+            RemoteEndpoint endpoint = config.ActiveRemote;
+            _remoteMainRoot = endpoint?.MainRoot ?? string.Empty;
+            _remoteFallbackRoot = endpoint?.FallbackRoot ?? string.Empty;
 
-            HotUpdateLogger.Log($"Remote URLs: main={remoteMainRoot}, fallback={remoteFallbackRoot}");
+            HotUpdateLogger.Log($"Remote environment: {config.Environment}, main={_remoteMainRoot}, fallback={_remoteFallbackRoot}");
         }
 
         string IRemoteServices.GetRemoteMainURL(string fileName)
         {
-            return BuildUrl(remoteMainRoot, fileName);
+            return BuildUrl(_remoteMainRoot, fileName);
         }
 
         string IRemoteServices.GetRemoteFallbackURL(string fileName)
         {
-            string fallbackRoot = string.IsNullOrWhiteSpace(remoteFallbackRoot) ? remoteMainRoot : remoteFallbackRoot;
+            string fallbackRoot = string.IsNullOrWhiteSpace(_remoteFallbackRoot) ? _remoteMainRoot : _remoteFallbackRoot;
             return BuildUrl(fallbackRoot, fileName);
         }
 
         private string BuildUrl(string root, string fileName)
         {
-            string url = _config.RemoteUrlTemplate.Replace("{Root}", (root ?? string.Empty).TrimEnd('/')).Replace("{Platform}", _platformName).Replace("{PackageName}", _packageName).Replace("{FileName}", fileName ?? string.Empty);
-
+            string url = $"{root}/{_platformName}/{_packageName}/{fileName}";
             return HotUpdateUtility.RemoveDuplicateSlashesAfterScheme(url);
         }
     }

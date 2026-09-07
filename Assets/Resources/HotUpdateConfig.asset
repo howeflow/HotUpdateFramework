@@ -12,16 +12,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7d3c35a7d7f345d5a93a4a6ce72018f2, type: 3}
   m_Name: HotUpdateConfig
   m_EditorClassIdentifier: 
-  platformNameOverride: 
-  remoteUrlTemplate: '{Root}/{Platform}/{PackageName}/{FileName}'
-  remoteRoots:
-  - http://127.0.0.1:8080
-  - https://your-cdn-domain.example.com/hotupdate/release
-  - https://your-cdn-domain.example.com/hotupdate/dev
+  environment: 0
+  localRemote:
+    mainRoot: http://127.0.0.1:8080
+    fallbackRoot: ''
+  devRemote:
+    mainRoot: https://your-cdn-domain.example.com/hotupdate/dev
+    fallbackRoot: https://your-cdn-domain.example.com/hotupdate/dev
+  releaseRemote:
+    mainRoot: https://your-cdn-domain.example.com/hotupdate/release
+    fallbackRoot: https://your-cdn-domain.example.com/hotupdate/release
   packageName: DefaultPackage
   playMode: 2
-  useBuildinFileSystemInHostMode: 0
-  packageVersionOverride: 
   manifestTimeout: 10
   downloadingMaxNumber: 8
   failedTryAgain: 3
+  builtinTag:
+  - builtin
+  downloadTag:
+  - dll
