@@ -1,0 +1,15 @@
+{
+  "name": "com.howe.hotupdate",
+  "version": "1.0.0",
+  "displayName": "",
+  "description": "A HotUpdate framework.",
+  "unity": "2022.3",
+  "keywords": [
+    "hotupdate",
+    "framework"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Howe"
+  }
+}
